@@ -1,0 +1,33 @@
+{
+  "id": "swarm",
+  "title": "Swarms",
+  "description": "Animate swarms.",
+  "version": "9.0.1",
+  "authors": [
+    {
+      "name": "o_Ove",
+      "discord": "Ove#4315",
+      "flags": {}
+    }
+  ],
+  "esmodules": [
+    "script/swarm.mjs"
+  ],
+  "url": "https://github.com/oOve/swarm",
+  "download": "https://github.com/oOve/swarm/archive/9.0.1.zip",
+  "manifest": "https://github.com/oOve/swarm/releases/latest/download/module.json",
+  "languages": [
+    {
+      "lang": "en",
+      "name": "English",
+      "path": "lang/en.json",
+      "flags": {}
+    }
+  ],
+  "license": "LICENSE",
+  "readme": "README.md",
+  "compatibility": {
+    "minimum": "9",
+    "verified": "9"
+  }
+}
