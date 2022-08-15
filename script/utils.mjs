@@ -96,7 +96,10 @@ export function vNorm(p){ // Normalize the vector p, p/||p||
 export function vAngle(p){ // The foundry compatible 'rotation angle' to point along the vector p
     return 90+Math.toDegrees(Math.atan2(p.y, p.x));
 }
-
+export function vRad(p){ // The foundry compatible 'rotation angle' to point along the vector p
+    return Math.atan2(p.y, p.x);
+  }
+  
 
 
 export class Vec2 {

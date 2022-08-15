@@ -1,4 +1,5 @@
 {
+  "name": "swarm",
   "id": "swarm",
   "title": "Swarms",
   "description": "Animate swarms.",
@@ -20,14 +21,13 @@
     {
       "lang": "en",
       "name": "English",
-      "path": "lang/en.json",
-      "flags": {}
+      "path": "lang/en.json"      
     }
   ],
   "license": "LICENSE",
   "readme": "README.md",
   "compatibility": {
-    "minimum": "9",
+    "minimum": "8",
     "verified": "9"
   }
 }

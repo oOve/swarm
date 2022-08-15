@@ -11,6 +11,7 @@
  ░                 ░              
  */
  const MOD_NAME = "swarm";
+ const SWARM_FLAG = "isSwarm";
  const SIGMA = 5;
  import * as utils from "./utils.mjs"
 
@@ -18,7 +19,7 @@ function Lang(k){
    return game.i18n.localize("DESTRUCTIBLES."+k);
  }
  
- 
+ let SWARMS = [];
 
  export default class Swarm{
     constructor( token, number ){
@@ -26,13 +27,18 @@ function Lang(k){
         let size = token.size
         this.sprites = [];
         this.dest = [];
+        this.speeds = [];
         for(let i=0;i<number;++i){
-            let s = PIXI.Sprite.from(token.img);
+            let s = PIXI.Sprite.from(token.texture.baseTexture);
             s.anchor.set(.5);
             s.x = token.x;
             s.y = token.y;
+            let ratio = s.width/s.height;
+            s.width = 0.5 * token.data.width * token.data.scale * canvas.grid.size * ratio;
+            s.height= 0.5 * token.data.height * token.data.scale * canvas.grid.size;
             this.dest.push({x:token.x, y:token.y});
-            this.sprites.push();
+            this.sprites.push(s);
+            this.speeds.push( 0.4 + Math.random()*0.5 )
             canvas.foreground.addChild(s);
         }
         this.tick = new PIXI.Ticker();
@@ -47,16 +53,24 @@ function Lang(k){
         this.tick.destroy();        
     }
   
-    refresh(ms){
+    refresh(ms){        
         for (let i=0; i<this.sprites.length;++i){
             let s = this.sprites[i];
             let p1 = {x:s.x, y:s.y};
-            let p2 = this.dest[i];            
-            let d = utils.vSub(p2-p1);
+            let p2 = this.dest[i];
+            let d = utils.vSub(p2, p1);
             let dist2 = d.x**2+d.y**2;
             if (dist2 < SIGMA){
-
+                let x = this.token.x + Math.random() * this.token.data.width  * canvas.grid.size;
+                let y = this.token.y + Math.random() * this.token.data.height * canvas.grid.size;
+                p2 = {x:x,y:y};
+                d = utils.vSub(p2,p1);
+                this.dest[i] = p2;
             }
+            d = utils.vNorm(d);
+            s.x += ms * this.speeds[i] * Math.PI * d.x;
+            s.y += ms * this.speeds[i] * Math.PI * d.y;
+            s.rotation = Math.PI/2. + utils.vRad(d);
         }
     }
   }
@@ -67,8 +81,14 @@ function Lang(k){
  
  Hooks.once("canvasReady", ()=> {
     // Scene loaded.
+    let swarm = canvas.tokens.placeables.filter( (t)=>{return t.document.getFlag(MOD_NAME,SWARM_FLAG);} ) 
 
- });
+    for (let s of swarm){
+        SWARMS.push(new Swarm(s, 20));
+    }
+
+});
+
  
  
  // Settings:
@@ -87,18 +107,49 @@ function Lang(k){
  
  
  
- // Hook into the token config render
- Hooks.on("renderTokenConfig", (app, html) => {
-
  
-   // Add the form group to the bottom of the Identity tab
-   //html[0].querySelector("div[data-tab='appearance']").append(formGroup);
-   //html[0].querySelector('footer button').addEventListener("click", onSubmitHook.bind({app:app, html:html}));
-   //let update_token_button = html[0].querySelector('footer>button:not(.assign-token)');
-   //update_token_button.addEventListener("click", onSubmitHook.bind({app:app, html:html}));
- 
-   // Set the apps height correctly
-   //app.setPosition();
- });
- 
- 
+ function createCheckBox(app, fields, data_name, title, hint){  
+    const label = document.createElement('label');
+    label.textContent = title; 
+    const input = document.createElement("input");
+    input.name = 'flags.'+MOD_NAME+'.' + data_name;
+    input.type = "checkbox";
+    input.title = hint;
+    
+    if (app.token.getFlag(MOD_NAME, data_name)){
+      input.checked = "true";
+    }
+  
+    fields.append(label);
+    fields.append(input);
+  }
+  
+  
+  // Hook into the token config render
+  Hooks.on("renderTokenConfig", (app, html) => {
+    if (!game.user.isGM) return;
+  
+    // Create a new form group
+    const formGroup = document.createElement("div");
+    formGroup.classList.add("form-group");
+    formGroup.classList.add("slim");
+  
+    // Create a label for this setting
+    const label = document.createElement("label");
+    label.textContent = "Swarm";
+    formGroup.prepend(label);
+  
+    // Create a form fields container
+    const formFields = document.createElement("div");
+    formFields.classList.add("form-fields");
+    formGroup.append(formFields);
+  
+    createCheckBox(app, formFields, SWARM_FLAG, "Swarm", '');    
+    
+    // Add the form group to the bottom of the Identity tab
+    html[0].querySelector("div[data-tab='character']").append(formGroup);
+  
+    // Set the apps height correctly
+    app.setPosition();
+  });
+  
