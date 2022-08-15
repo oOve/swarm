@@ -12,6 +12,7 @@
  */
  const MOD_NAME = "swarm";
  const SWARM_FLAG = "isSwarm";
+ const SWARM_SIZE_FLAG = "swarmSize";
  const SIGMA = 5;
  import * as utils from "./utils.mjs"
 
@@ -34,12 +35,12 @@ function Lang(k){
             s.x = token.x;
             s.y = token.y;
             let ratio = s.width/s.height;
-            s.width = 0.5 * token.data.width * token.data.scale * canvas.grid.size * ratio;
-            s.height= 0.5 * token.data.height * token.data.scale * canvas.grid.size;
+            s.width = 0.25 * token.data.width * token.data.scale * canvas.grid.size * ratio;
+            s.height= 0.25 * token.data.height * token.data.scale * canvas.grid.size;
             this.dest.push({x:token.x, y:token.y});
             this.sprites.push(s);
             this.speeds.push( 0.4 + Math.random()*0.5 )
-            canvas.foreground.addChild(s);
+            canvas.background.addChild(s);
         }
         this.tick = new PIXI.Ticker();
         this.tick.add( this.refresh.bind(this) );
@@ -84,7 +85,7 @@ function Lang(k){
     let swarm = canvas.tokens.placeables.filter( (t)=>{return t.document.getFlag(MOD_NAME,SWARM_FLAG);} ) 
 
     for (let s of swarm){
-        SWARMS.push(new Swarm(s, 20));
+        SWARMS.push(new Swarm(s, s.document.getFlag(MOD_NAME, SWARM_SIZE_FLAG)));
     }
 
 });
@@ -107,6 +108,34 @@ function Lang(k){
  
  
  
+function createLabel(text){
+  const label = document.createElement('label');
+  label.textContent = text;
+  return label;
+}
+
+function textBoxConfig(parent, app, flag_name, title, type="number",
+                       placeholder=null, default_value=null, step=null)
+{ 
+  let flags = app.token.flags;
+  if (flags === undefined) flags = app.token.data.flags;
+
+  parent.append(createLabel(title));
+  const input = document.createElement('input');
+  input.name = 'flags.'+MOD_NAME+'.'+flag_name;
+  input.type = type;  
+  if(step) input.step = step;
+  if(placeholder) input.placeholder = placeholder;
+
+  if(flags?.[MOD_NAME]?.[flag_name]){
+    input.value=flags?.[MOD_NAME]?.[flag_name];
+  }
+  else if(default_value!=null){
+    input.value = default_value;
+  }
+  parent.append(input);
+}
+
  
  function createCheckBox(app, fields, data_name, title, hint){  
     const label = document.createElement('label');
@@ -144,7 +173,8 @@ function Lang(k){
     formFields.classList.add("form-fields");
     formGroup.append(formFields);
   
-    createCheckBox(app, formFields, SWARM_FLAG, "Swarm", '');    
+    createCheckBox(app, formFields, SWARM_FLAG, "Swarm", '');
+    textBoxConfig(formFields, app, SWARM_SIZE_FLAG, "Size", "number", 20, 20,1);
     
     // Add the form group to the bottom of the Identity tab
     html[0].querySelector("div[data-tab='character']").append(formGroup);
