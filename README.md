@@ -1,23 +1,39 @@
 # Swarm
-Swarms of monsters that move as one.
+Create swarms of monsters and critters that move as one. Rats, bats, ravens, bugs, pretty butterflies or even trolls (who wouldn't want to fight a swarm of trolls?) every token can be made into a swarm.
 ![ezgif-5-6176290679](https://user-images.githubusercontent.com/8543541/184756758-98dbbfaf-9d24-4b5d-805f-68385ea0707b.gif)
 
+## Installation
+Install by searching for *swarm* in the module browsing tool or manually using this url: https://github.com/oOve/swarm/releases/latest/download/module.json
 
+## Useage
 
-# Localization
+Right click any token (or an actors prototype token) and bring up the token config. 
+- ![image](https://user-images.githubusercontent.com/8543541/184981683-c1ab575b-8f80-4ba5-b0ab-3663414580be.png)
+- Enable your swarm by checking the box **Swarm**
+- Check the **over** box to have your swarm fly over other tokens/players or leave it unchecked for under. Bats and crows fly over, whereas spiders under.
+- **Size** is the number of critters in your swarm
+- **Speed** lets you configure the critters individual speeds. Are they moving too fast, reduce this number.
+
+On the next tab: *Appearance*
+ - ![image](https://user-images.githubusercontent.com/8543541/184982250-82de10ae-39c3-4161-8f8a-306b548eebaf.png)
+ - Modify the **Scale** to reduce or increase the size of the individual critters.
+ - Change the dimensions to create a larger area where the bugs crawl.
+ - Mirror image if your critters e.g., move backward.
+
+## Localization
 Current support for:
  * English -- https://github.com/oOve 
  * Your language ?
 
 If you want to translate this module, download [this file](lang/en.json) and translate it. After that open an issue sharing your translation. Also share the default name convention for your language. You can find that by either, finding a system or module that is already translated to your language and open its module.json. It should look something like this: ``` "languages": [ { "lang": "en", "name": "English", "path": "lang/en.json" } ```
 
-# Compatibility
-Tested on [Foundry VTT](https://foundryvtt.com/  "Foundry VTT") version `9`.
+## Compatibility
+Tested on [Foundry VTT](https://foundryvtt.com/  "Foundry VTT") version `9`, version 10 coming soon.
 
-# Feedback
+## Feedback
 All feedback and suggestions are welcome. Please contact me on Discord (Ove#4315), join the discussion on the Modules' [Discord channel](https://discord.gg/5CCAhsKFDp)
 
 Any issues, bugs, or feature requests are always welcome to be reported directly to the [Issue Tracker](https://github.com/oOve/FollowMe/issues  "Issue Tracker")
 
-# Licensing
+## Licensing
 **Swarms** is a module for [Foundry VTT](https://foundryvtt.com/  "Foundry VTT") by Dr.O after original idea by Brunhine and is licensed under a [Creative Commons Attribution 4.0 International License](http://creativecommons.org/licenses/by/4.0/).
