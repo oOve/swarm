@@ -11,9 +11,12 @@
  ░                 ░              
  */
  const MOD_NAME = "swarm";
- const SWARM_FLAG = "isSwarm";
+ const SWARM_FLAG = "isSwarm"; 
  const SWARM_SIZE_FLAG = "swarmSize";
+ const OVER_FLAG = "swarmOverPlayers";
+ const SETTING_HP_REDUCE = "reduceSwarmWithHP";
  const SIGMA = 5;
+ const GAMMA = 1000000;
  import * as utils from "./utils.mjs"
 
 function Lang(k){
@@ -25,27 +28,35 @@ function Lang(k){
  export default class Swarm{
     constructor( token, number ){
         this.token = token;
-        let size = token.size
         this.sprites = [];
         this.dest = [];
         this.speeds = [];
-        for(let i=0;i<number;++i){
-            let s = PIXI.Sprite.from(token.document.data.img);
-            s.anchor.set(.5);
-            s.x = token.data.x;
-            s.y = token.data.y;
-            let ratio = s.width/s.height;
-            s.width = 0.5 * token.data.width  * token.data.scale * canvas.grid.size * ratio;
-            s.height= 0.5 * token.data.height * token.data.scale * canvas.grid.size;
-            this.dest.push({x:token.x, y:token.y});
-            this.sprites.push(s);
-            this.speeds.push( 0.4 + Math.random()*0.5 )
-            canvas.background.addChild(s);
-        }
+        let layer = (token.document.getFlag(MOD_NAME, OVER_FLAG)?canvas.foreground:canvas.background);
+        this.createSprites(number, token, layer);
+        
         this.tick = new PIXI.Ticker();
         this.tick.add( this.refresh.bind(this) );
         this.tick.start();
-    }   
+    }    
+    
+    async createSprites( number, token, layer ){
+        for(let i=0;i<number;++i){
+            let s = await PIXI.Sprite.from(token.document.data.img);
+            s.anchor.set(.5);
+            s.x = token.data.x;
+            s.y = token.data.y;
+            let ratio = s.texture.width/s.texture.height;
+            s.width = 0.5 * token.data.width * token.data.scale * canvas.grid.size * ratio;
+            s.height= 0.5 * token.data.width * token.data.scale * canvas.grid.size; // Not a typo
+            this.dest.push({x:token.x, y:token.y});
+            this.sprites.push(s);
+            this.speeds.push( 0.4 + Math.random()*0.5 )
+            layer.addChild(s);
+        }
+    }
+
+    kill(percentage){
+    }
       
     destroy(){
         for (let s of this.sprites){
@@ -67,14 +78,20 @@ function Lang(k){
                 p2 = {x:x,y:y};
                 d = utils.vSub(p2,p1);
                 this.dest[i] = p2;
-            }            
-            let mv = utils.vNorm(d);
-            mv = utils.vMult(mv, ms*this.speeds[i]*3);
-            if ((mv.x**2+mv.y**2)>(d.x**2+d.y**2)){mv=d;}
-            s.x += mv.x;
-            s.y += mv.y;
-            s.rotation = Math.PI/2. + utils.vRad(d);
+            }
             
+            if (dist2 > GAMMA){
+                s.x = p2.x;
+                s.y = p2.y;
+            }else{
+                let mv = utils.vNorm(d);
+                mv = utils.vMult(mv, ms*this.speeds[i]*3);
+                if ((mv.x**2+mv.y**2)>(d.x**2+d.y**2)){mv=d;}
+                s.x += mv.x;
+                s.y += mv.y;
+                //s.rotation = Math.PI/2. + utils.vRad(d);
+                s.rotation = -Math.PI/2. + utils.vRad(d);
+            }
         }
     }
 }
@@ -82,21 +99,36 @@ function Lang(k){
 
 //Only in V10+
 Hooks.on('canvasTearDown', (a,b)=>{
+    for(let key of Object.keys(SWARMS)){
+        SWARMS[key].destroy();
+        delete SWARMS[key];
+      }
+});
+
+
+
+
+Hooks.on('updateActor', (actor, change, options, user_id)=>{
+
+    let val = change.data?.attributes?.hp?.value;
+    if (val == undefined){
+        val = change.system?.attributes?.hp?.value;
+    }
+    if (val != undefined){
+      let tk = actor.token;
+      let mx = actor.data.data.attributes.hp.max;
+      let hp = 100*val/mx;
+    }
 
 });
 
-/*
-Hooks.on('canvasInit', (canvas)=>{
-  console.warn("Canvas Init");
-  for(let s of SWARMS){
-    s.destroy();
-  }
-});
-*/
+
 
 function createSwarmOnToken(token){
   SWARMS[token.id] = new Swarm(token, token.document.getFlag(MOD_NAME, SWARM_SIZE_FLAG));
-  token.alpha = 0;
+  if (!game.user.isGM){
+    token.alpha = 0;
+  }
 }
 
 // Delete token
@@ -127,18 +159,29 @@ Hooks.on("canvasReady", ()=> {
  
  // Settings:
  Hooks.once("init", () => {
-    /*
-    game.settings.register(MOD_NAME, SUPPRESS_OVERLAY, {
-        name: "Suppress Overlay Icons",
-        hint: "Prevent overlay icons on all Destructibles",
+    
+    game.settings.register(MOD_NAME, SETTING_HP_REDUCE, {
+        name: "Reduce swarm with HP",
+        hint: "Reduce the swarm as HP decreases, requires support for your system",
         scope: 'world',
         config: true,
         type: Boolean,
         default: false
    });
-   */ 
+  
  });
  
+
+
+ /*
+  █████  █████ █████
+░░███  ░░███ ░░███ 
+ ░███   ░███  ░███ 
+ ░███   ░███  ░███ 
+ ░███   ░███  ░███ 
+ ░███   ░███  ░███ 
+ ░░████████   █████
+  ░░░░░░░░   ░░░░░  */
  
  
 function createLabel(text){
@@ -207,6 +250,7 @@ function textBoxConfig(parent, app, flag_name, title, type="number",
     formGroup.append(formFields);
   
     createCheckBox(app, formFields, SWARM_FLAG, "Swarm", '');
+    createCheckBox(app, formFields, OVER_FLAG, "Over", "Check if the swarm should be placed over players." );
     textBoxConfig(formFields, app, SWARM_SIZE_FLAG, "Size", "number", 20, 20,1);
     
     // Add the form group to the bottom of the Identity tab
