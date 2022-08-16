@@ -13,6 +13,7 @@
  const MOD_NAME = "swarm";
  const SWARM_FLAG = "isSwarm"; 
  const SWARM_SIZE_FLAG = "swarmSize";
+ const SWARM_SPEED_FLAG = "swarmSpeed";
  const OVER_FLAG = "swarmOverPlayers";
  const SETTING_HP_REDUCE = "reduceSwarmWithHP";
  const SIGMA = 5;
@@ -45,12 +46,19 @@ function Lang(k){
             s.anchor.set(.5);
             s.x = token.data.x;
             s.y = token.data.y;
-            let ratio = s.texture.width/s.texture.height;
+            
+            let ratio = s.texture.width/s.texture.height;            
             s.width = 0.5 * token.data.width * token.data.scale * canvas.grid.size * ratio;
             s.height= 0.5 * token.data.width * token.data.scale * canvas.grid.size; // Not a typo
+            
+            if (token.data.mirrorX) s.scale.x *= -1;
+            if (token.data.mirrorY) s.scale.y *= -1;
+
             this.dest.push({x:token.x, y:token.y});
             this.sprites.push(s);
-            this.speeds.push( 0.4 + Math.random()*0.5 )
+            let sf = token.document.getFlag(MOD_NAME, SWARM_SPEED_FLAG);
+            if (sf===undefined) sf = 1;
+            this.speeds.push( sf*.5 + sf * Math.random()*0.5 )
             layer.addChild(s);
         }
     }
@@ -106,8 +114,26 @@ Hooks.on('canvasTearDown', (a,b)=>{
 });
 
 
+Hooks.on('updateToken', (token, change, options, user_id)=>{
+    if (!game.user.isGM) return; // Only at DMs client
+    if (change?.flags?.swarm){   // If any swarm related flag was in this update
+        deleteSwarmOnToken(token);
+        if (token.data?.flags?.[MOD_NAME]?.[SWARM_FLAG]){
+            createSwarmOnToken(canvas.tokens.get(token.id));
+        }
+    }
+
+    if (change.hidden != undefined && token.data?.flags?.[MOD_NAME]?.[SWARM_FLAG]){
+        if(change.hidden) deleteSwarmOnToken(token);
+        else createSwarmOnToken(canvas.tokens.get(token.id));
+    }
+    
+
+    
+});
 
 
+// TODO: Add HP interaction
 Hooks.on('updateActor', (actor, change, options, user_id)=>{
 
     let val = change.data?.attributes?.hp?.value;
@@ -122,7 +148,12 @@ Hooks.on('updateActor', (actor, change, options, user_id)=>{
 
 });
 
-
+function deleteSwarmOnToken(token){
+    if (token.id in SWARMS){
+        SWARMS[token.id].destroy();
+        delete SWARMS[token.id];
+    }
+}
 
 function createSwarmOnToken(token){
   SWARMS[token.id] = new Swarm(token, token.document.getFlag(MOD_NAME, SWARM_SIZE_FLAG));
@@ -151,7 +182,8 @@ Hooks.on("canvasReady", ()=> {
     let swarm = canvas.tokens.placeables.filter( (t)=>{return t.document.getFlag(MOD_NAME,SWARM_FLAG);} ) 
     //console.error("canvasReady",swarm);
     for (let s of swarm){
-        createSwarmOnToken(s);
+        if (s.document.hidden===false)
+            createSwarmOnToken(s);
     }
 });
 
@@ -252,6 +284,7 @@ function textBoxConfig(parent, app, flag_name, title, type="number",
     createCheckBox(app, formFields, SWARM_FLAG, "Swarm", '');
     createCheckBox(app, formFields, OVER_FLAG, "Over", "Check if the swarm should be placed over players." );
     textBoxConfig(formFields, app, SWARM_SIZE_FLAG, "Size", "number", 20, 20,1);
+    textBoxConfig(formFields, app, SWARM_SPEED_FLAG, "Speed", "number", 1.0, 1.0, 0.1);
     
     // Add the form group to the bottom of the Identity tab
     html[0].querySelector("div[data-tab='character']").append(formGroup);
