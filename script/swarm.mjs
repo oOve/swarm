@@ -20,7 +20,7 @@ function Lang(k){
    return game.i18n.localize("DESTRUCTIBLES."+k);
  }
  
- let SWARMS = [];
+ let SWARMS = {};
 
  export default class Swarm{
     constructor( token, number ){
@@ -30,13 +30,13 @@ function Lang(k){
         this.dest = [];
         this.speeds = [];
         for(let i=0;i<number;++i){
-            let s = PIXI.Sprite.from(token.texture.baseTexture);
+            let s = PIXI.Sprite.from(token.document.data.img);
             s.anchor.set(.5);
-            s.x = token.x;
-            s.y = token.y;
+            s.x = token.data.x;
+            s.y = token.data.y;
             let ratio = s.width/s.height;
-            s.width = 0.25 * token.data.width * token.data.scale * canvas.grid.size * ratio;
-            s.height= 0.25 * token.data.height * token.data.scale * canvas.grid.size;
+            s.width = 0.5 * token.data.width  * token.data.scale * canvas.grid.size * ratio;
+            s.height= 0.5 * token.data.height * token.data.scale * canvas.grid.size;
             this.dest.push({x:token.x, y:token.y});
             this.sprites.push(s);
             this.speeds.push( 0.4 + Math.random()*0.5 )
@@ -62,32 +62,65 @@ function Lang(k){
             let d = utils.vSub(p2, p1);
             let dist2 = d.x**2+d.y**2;
             if (dist2 < SIGMA){
-                let x = this.token.x + Math.random() * this.token.data.width  * canvas.grid.size;
-                let y = this.token.y + Math.random() * this.token.data.height * canvas.grid.size;
+                let x = this.token.data.x + Math.random() * this.token.data.width  * canvas.grid.size;
+                let y = this.token.data.y + Math.random() * this.token.data.height * canvas.grid.size;
                 p2 = {x:x,y:y};
                 d = utils.vSub(p2,p1);
                 this.dest[i] = p2;
-            }
-            d = utils.vNorm(d);
-            s.x += ms * this.speeds[i] * Math.PI * d.x;
-            s.y += ms * this.speeds[i] * Math.PI * d.y;
+            }            
+            let mv = utils.vNorm(d);
+            mv = utils.vMult(mv, ms*this.speeds[i]*3);
+            if ((mv.x**2+mv.y**2)>(d.x**2+d.y**2)){mv=d;}
+            s.x += mv.x;
+            s.y += mv.y;
             s.rotation = Math.PI/2. + utils.vRad(d);
+            
         }
     }
+}
+
+
+//Only in V10+
+Hooks.on('canvasTearDown', (a,b)=>{
+
+});
+
+/*
+Hooks.on('canvasInit', (canvas)=>{
+  console.warn("Canvas Init");
+  for(let s of SWARMS){
+    s.destroy();
   }
-  
+});
+*/
 
+function createSwarmOnToken(token){
+  SWARMS[token.id] = new Swarm(token, token.document.getFlag(MOD_NAME, SWARM_SIZE_FLAG));
+  token.alpha = 0;
+}
 
-
+// Delete token
+Hooks.on('deleteToken', (token, options, user_id)=>{
+  if (token.id in SWARMS){
+    SWARMS[token.id].destroy();
+    delete SWARMS[token.id];
+  }
+})
+// Create token
+Hooks.on('createToken', (token, options, user_id)=>{
+  //console.warn("Create Token", token, options);
+  if (token.getFlag(MOD_NAME, SWARM_FLAG)===true){
+    createSwarmOnToken(token.object);
+  }
+});
  
- Hooks.once("canvasReady", ()=> {
+Hooks.on("canvasReady", ()=> {
     // Scene loaded.
     let swarm = canvas.tokens.placeables.filter( (t)=>{return t.document.getFlag(MOD_NAME,SWARM_FLAG);} ) 
-
+    //console.error("canvasReady",swarm);
     for (let s of swarm){
-        SWARMS.push(new Swarm(s, s.document.getFlag(MOD_NAME, SWARM_SIZE_FLAG)));
+        createSwarmOnToken(s);
     }
-
 });
 
  
