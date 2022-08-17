@@ -19,6 +19,11 @@ On the next tab: *Appearance*
  - Modify the **Scale** to reduce or increase the size of the individual critters.
  - Change the dimensions to create a larger area where the bugs crawl.
  - Mirror image if your critters e.g., move backward.
+ 
+And you should have your swarm ready for action:
+![image](https://user-images.githubusercontent.com/8543541/185231081-13f14709-25e3-4a2d-a3be-38146575329b.png)
+**Note**: The large stationary critter is only visible for the DM, it is your handle to drag around the swarm. If you would like to make this "control token" less obtrusive, lower the opacity in the token config.
+ 
 
 ## Localization
 Current support for:
