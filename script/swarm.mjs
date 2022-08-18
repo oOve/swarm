@@ -25,7 +25,7 @@
  import * as utils from "./utils.mjs"
 
 function Lang(k){
-   return game.i18n.localize("DESTRUCTIBLES."+k);
+   return game.i18n.localize("SWARM."+k);
  }
  
  let SWARMS = {};
@@ -291,22 +291,20 @@ function dropDownConfig(parent, app, flag_name, title, values, default_value=nul
   let flags = app.token.flags;
   if (flags === undefined) flags = app.token.data.flags;
 
-  parent.append(createLabel(title));
+  let cur = flags?.[MOD_NAME]?.[flag_name];
+  //parent.append(createLabel(title));
   const input = document.createElement('select');
   input.name = 'flags.'+MOD_NAME+'.'+flag_name;
+  input.style.width = "50px";
   
   for (let o of values){
     let opt = document.createElement('option');
     opt.innerText = o;
+    if (cur===o) opt.classList.add('selected');
     input.append(opt);
   }
+  input.value = cur;
 
-  if(flags?.[MOD_NAME]?.[flag_name]){
-    input.value=flags?.[MOD_NAME]?.[flag_name];
-  }
-  else if(default_value!=null){
-    input.value = default_value;
-  }
   parent.append(input);
 }
 
