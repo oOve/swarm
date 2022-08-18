@@ -14,10 +14,14 @@
  const SWARM_FLAG = "isSwarm"; 
  const SWARM_SIZE_FLAG = "swarmSize";
  const SWARM_SPEED_FLAG = "swarmSpeed";
+ const ANIM_TYPE_FLAG = "animation";
+ const ANIM_TYPE_CIRCULAR = "circular";
+ const ANIM_TYPE_RAND_SQUARE = "random";
+
  const OVER_FLAG = "swarmOverPlayers";
  const SETTING_HP_REDUCE = "reduceSwarmWithHP";
  const SIGMA = 5;
- const GAMMA = 1000000;
+ const GAMMA = 1000;
  import * as utils from "./utils.mjs"
 
 function Lang(k){
@@ -28,32 +32,66 @@ function Lang(k){
 
  export default class Swarm{
     constructor( token, number ){
+        this.t = 0;
         this.token = token;
         this.sprites = [];
         this.dest = [];
         this.speeds = [];
-        let layer = (token.document.getFlag(MOD_NAME, OVER_FLAG)?canvas.foreground:canvas.background);
+        this.ofsets = [];
+
+        let layer = (token.document.getFlag(MOD_NAME, OVER_FLAG)?canvas.foreground:canvas.background);        
         this.createSprites(number, token, layer);
         
         this.tick = new PIXI.Ticker();
-        this.tick.add( this.refresh.bind(this) );
+        let anim = token.document.getFlag(MOD_NAME, ANIM_TYPE_FLAG);
+        let method = this.circular;
+        switch(anim){
+          case ANIM_TYPE_CIRCULAR:
+            method = this.circular;
+            break;
+          case ANIM_TYPE_RAND_SQUARE:
+            method = this.randSquare;
+            break;
+        }
+        this.tick.add( method.bind(this) );
         this.tick.start();
     }    
     
     async createSprites( number, token, layer ){
+        let use_random_image    = token.actor.data.token.randomImg;
+        let wildcard_image_path = token.actor.data.token.img;
+
+        let images = [];
+        if (use_random_image){
+          let res = await FilePicker.browse('data', wildcard_image_path, {wildcard:true});
+          for (let f of res.files){
+            images.push(f);
+          }
+        }else{
+          images.push(token.document.data.img);
+        }
+
         for(let i=0;i<number;++i){
-            let s = await PIXI.Sprite.from(token.document.data.img);
+            this.ofsets.push(Math.random()*97);
+            let img = images[Math.floor(Math.random()*images.length)];
+            let s = await PIXI.Sprite.from(img);
             s.anchor.set(.5);
             s.x = token.data.x;
             s.y = token.data.y;
-            
-            let ratio = s.texture.width/s.texture.height;            
-            s.width = 0.5 * token.data.width * token.data.scale * canvas.grid.size * ratio;
-            s.height= 0.5 * token.data.width * token.data.scale * canvas.grid.size; // Not a typo
-            
-            if (token.data.mirrorX) s.scale.x *= -1;
-            if (token.data.mirrorY) s.scale.y *= -1;
 
+            let scale = ()=>{
+              let smax = Math.max(s.texture.width, s.texture.height);
+              s.scale.x = token.data.scale * canvas.grid.size / smax;
+              s.scale.y = token.data.scale * canvas.grid.size / smax;
+              if (token.data.mirrorX) s.scale.x *= -1;
+              if (token.data.mirrorY) s.scale.y *= -1;
+            };
+            if (s.texture.baseTexture.valid){
+              scale();
+            }else{
+              s.texture.baseTexture.on('loaded', scale);
+            }
+            
             this.dest.push({x:token.x, y:token.y});
             this.sprites.push(s);
             let sf = token.document.getFlag(MOD_NAME, SWARM_SPEED_FLAG);
@@ -72,34 +110,60 @@ function Lang(k){
         }
         this.tick.destroy();        
     }
-  
-    refresh(ms){        
+
+    randSquare(ms){
+      for (let i=0; i<this.sprites.length;++i){
+        let s = this.sprites[i];
+        let d = utils.vSub(this.dest[i], {x:s.x, y:s.y});
+        let len = utils.vLen(d);
+        if (len<SIGMA || len>GAMMA){
+          let x = this.token.data.x + Math.random() * this.token.data.width  * canvas.grid.size;
+          let y = this.token.data.y + Math.random() * this.token.data.height * canvas.grid.size;
+          this.dest[i] = {x:x,y:y};
+        }
+      }
+      this.move(ms);
+    }
+
+
+    circular(ms){
+        this.t += ms;        
+        let _rx = 1 * 0.5 * canvas.grid.size * this.token.data.width;
+        let _ry = 1 * 0.5 * canvas.grid.size * this.token.data.height;
+
+        for (let i=0; i<this.sprites.length;++i){
+            
+            let t = this.t * 0.02 + this.ofsets[i];
+            let rY = 1 * (0.5 + 0.5 * ( 
+                1.0 * Math.sin(    t * 0.3) + 
+                0.3 * Math.sin(2 * t + 0.8) + 
+                0.26* Math.sin(3 * t + 0.8)
+                ));
+            let x =    Math.cos(t*this.speeds[i]);
+            let y = rY*Math.sin(t*this.speeds[i]);
+
+            let ci = Math.cos(this.ofsets[i]);
+            let si = Math.sin(this.ofsets[i]);
+            let rx = _rx*(ci*x - si*y);
+            let ry = _ry*(si*x + ci*y);
+
+            this.dest[i] = {x:rx + this.token.center.x,
+                            y:ry + this.token.center.y};
+        }
+        this.move(ms);
+    }
+
+    move(ms){
         for (let i=0; i<this.sprites.length;++i){
             let s = this.sprites[i];
-            let p1 = {x:s.x, y:s.y};
-            let p2 = this.dest[i];
-            let d = utils.vSub(p2, p1);
-            let dist2 = d.x**2+d.y**2;
-            if (dist2 < SIGMA){
-                let x = this.token.data.x + Math.random() * this.token.data.width  * canvas.grid.size;
-                let y = this.token.data.y + Math.random() * this.token.data.height * canvas.grid.size;
-                p2 = {x:x,y:y};
-                d = utils.vSub(p2,p1);
-                this.dest[i] = p2;
-            }
-            
-            if (dist2 > GAMMA){
-                s.x = p2.x;
-                s.y = p2.y;
-            }else{
-                let mv = utils.vNorm(d);
-                mv = utils.vMult(mv, ms*this.speeds[i]*3);
-                if ((mv.x**2+mv.y**2)>(d.x**2+d.y**2)){mv=d;}
-                s.x += mv.x;
-                s.y += mv.y;
-                //s.rotation = Math.PI/2. + utils.vRad(d);
-                s.rotation = -Math.PI/2. + utils.vRad(d);
-            }
+            let d = utils.vSub( this.dest[i], {x:s.x, y:s.y} );
+
+            let mv = utils.vNorm(d);
+            mv = utils.vMult(mv, ms*this.speeds[i]*4);
+            if ((mv.x**2+mv.y**2)>(d.x**2+d.y**2)){mv=d;}
+            s.x += mv.x;
+            s.y += mv.y;
+            s.rotation = -Math.PI/2. + utils.vRad(d);
         }
     }
 }
@@ -222,6 +286,32 @@ function createLabel(text){
   return label;
 }
 
+function dropDownConfig(parent, app, flag_name, title, values, default_value=null)
+{ 
+  let flags = app.token.flags;
+  if (flags === undefined) flags = app.token.data.flags;
+
+  parent.append(createLabel(title));
+  const input = document.createElement('select');
+  input.name = 'flags.'+MOD_NAME+'.'+flag_name;
+  
+  for (let o of values){
+    let opt = document.createElement('option');
+    opt.innerText = o;
+    input.append(opt);
+  }
+
+  if(flags?.[MOD_NAME]?.[flag_name]){
+    input.value=flags?.[MOD_NAME]?.[flag_name];
+  }
+  else if(default_value!=null){
+    input.value = default_value;
+  }
+  parent.append(input);
+}
+
+
+
 function textBoxConfig(parent, app, flag_name, title, type="number",
                        placeholder=null, default_value=null, step=null)
 { 
@@ -285,7 +375,8 @@ function textBoxConfig(parent, app, flag_name, title, type="number",
     createCheckBox(app, formFields, OVER_FLAG, "Over", "Check if the swarm should be placed over players." );
     textBoxConfig(formFields, app, SWARM_SIZE_FLAG, "Size", "number", 20, 20,1);
     textBoxConfig(formFields, app, SWARM_SPEED_FLAG, "Speed", "number", 1.0, 1.0, 0.1);
-    
+    dropDownConfig(formFields,app, ANIM_TYPE_FLAG, "anim", [ANIM_TYPE_CIRCULAR,ANIM_TYPE_RAND_SQUARE],ANIM_TYPE_CIRCULAR);
+
     // Add the form group to the bottom of the Identity tab
     html[0].querySelector("div[data-tab='character']").append(formGroup);
   
