@@ -395,7 +395,7 @@ function textBoxConfig(parent, app, flag_name, title, type="number",
   
     createCheckBox(app, formFields, SWARM_FLAG, "Swarm", '');
     createCheckBox(app, formFields, OVER_FLAG, "Over", "Check if the swarm should be placed over players." );
-    textBoxConfig(formFields, app, SWARM_SIZE_FLAG, "Size", "number", 20, 20,1);
+    textBoxConfig(formFields, app, SWARM_SIZE_FLAG, "Count", "number", 20, 20,1);
     textBoxConfig(formFields, app, SWARM_SPEED_FLAG, "Speed", "number", 1.0, 1.0, 0.1);
     dropDownConfig(formFields,app, ANIM_TYPE_FLAG, "anim", ANIM_TYPES, ANIM_TYPE_CIRCULAR);
 
