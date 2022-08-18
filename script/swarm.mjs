@@ -14,9 +14,12 @@
  const SWARM_FLAG = "isSwarm"; 
  const SWARM_SIZE_FLAG = "swarmSize";
  const SWARM_SPEED_FLAG = "swarmSpeed";
+ 
  const ANIM_TYPE_FLAG = "animation";
  const ANIM_TYPE_CIRCULAR = "circular";
  const ANIM_TYPE_RAND_SQUARE = "random";
+ const ANIM_TYPE_SPIRAL = "spiral";
+ const ANIM_TYPES = [ANIM_TYPE_CIRCULAR, ANIM_TYPE_RAND_SQUARE, ANIM_TYPE_SPIRAL];
 
  const OVER_FLAG = "swarmOverPlayers";
  const SETTING_HP_REDUCE = "reduceSwarmWithHP";
@@ -51,6 +54,9 @@ function Lang(k){
             break;
           case ANIM_TYPE_RAND_SQUARE:
             method = this.randSquare;
+            break;
+          case ANIM_TYPE_SPIRAL:
+            method = this.spiral;
             break;
         }
         this.tick.add( method.bind(this) );
@@ -123,6 +129,24 @@ function Lang(k){
         }
       }
       this.move(ms);
+    }
+
+    spiral(ms){
+        this.t += ms;
+        let rx =  0.5 * canvas.grid.size * this.token.data.width;
+        let ry =  0.5 * canvas.grid.size * this.token.data.height;
+        for (let i=0; i<this.sprites.length;++i){
+            let t = this.speeds[i] * this.t*0.02 + this.ofsets[i];
+            let x = Math.cos(t);
+            let y = 0.4*Math.sin(t);
+
+            let ci = Math.cos((1/17)*t);
+            let si = Math.sin((1/17)*t);
+            this.dest[i] = {x: rx*(ci*x - si*y) + this.token.center.x,
+                            y: ry*(si*x + ci*y) + this.token.center.y };
+
+        }
+        this.move(ms);
     }
 
 
@@ -373,7 +397,7 @@ function textBoxConfig(parent, app, flag_name, title, type="number",
     createCheckBox(app, formFields, OVER_FLAG, "Over", "Check if the swarm should be placed over players." );
     textBoxConfig(formFields, app, SWARM_SIZE_FLAG, "Size", "number", 20, 20,1);
     textBoxConfig(formFields, app, SWARM_SPEED_FLAG, "Speed", "number", 1.0, 1.0, 0.1);
-    dropDownConfig(formFields,app, ANIM_TYPE_FLAG, "anim", [ANIM_TYPE_CIRCULAR,ANIM_TYPE_RAND_SQUARE],ANIM_TYPE_CIRCULAR);
+    dropDownConfig(formFields,app, ANIM_TYPE_FLAG, "anim", ANIM_TYPES, ANIM_TYPE_CIRCULAR);
 
     // Add the form group to the bottom of the Identity tab
     html[0].querySelector("div[data-tab='character']").append(formGroup);
