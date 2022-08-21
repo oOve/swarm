@@ -8,14 +8,19 @@ Install by searching for *swarm* in the module browsing tool or manually using t
 ## Useage
 
 Right click any token (or an actors prototype token) and bring up the token config. 
-- ![image](https://user-images.githubusercontent.com/8543541/184981683-c1ab575b-8f80-4ba5-b0ab-3663414580be.png)
+- ![image](https://user-images.githubusercontent.com/8543541/185505929-485c7db0-23fe-4573-ae92-13476e6efde5.png)
 - Enable your swarm by checking the box **Swarm**
 - Check the **over** box to have your swarm fly over other tokens/players or leave it unchecked for under. Bats and crows fly over, whereas spiders under.
-- **Size** is the number of critters in your swarm
+- **Count** is the number of critters in your swarm
 - **Speed** lets you configure the critters individual speeds. Are they moving too fast, reduce this number.
+- At last you have a drop-down box where you can choose the swarm animation, see below.
+
+![ezgif-5-0069376d9c](https://user-images.githubusercontent.com/8543541/185506059-00e0ae14-a0fb-4fcd-8cb2-543c3670a13d.gif)
+
 
 On the next tab: *Appearance*
  - ![image](https://user-images.githubusercontent.com/8543541/184982250-82de10ae-39c3-4161-8f8a-306b548eebaf.png)
+ - If you are modifying a prototype token, you can enter a wildcard pattern as your image. If enabled as well, your swarm will draw randomly from the wildcard token images.
  - Modify the **Scale** to reduce or increase the size of the individual critters.
  - Change the dimensions to create a larger area where the bugs crawl.
  - Mirror image if your critters e.g., move backward.
