@@ -10,30 +10,31 @@
    ░       ░       ░         ░ ░  
  ░                 ░              
  */
- const MOD_NAME = "swarm";
- const SWARM_FLAG = "isSwarm"; 
- const SWARM_SIZE_FLAG = "swarmSize";
- const SWARM_SPEED_FLAG = "swarmSpeed";
- 
- const ANIM_TYPE_FLAG = "animation";
- const ANIM_TYPE_CIRCULAR = "circular";
- const ANIM_TYPE_RAND_SQUARE = "random";
- const ANIM_TYPE_SPIRAL = "spiral";
- const ANIM_TYPES = [ANIM_TYPE_CIRCULAR, ANIM_TYPE_RAND_SQUARE, ANIM_TYPE_SPIRAL];
+const MOD_NAME = "swarm";
+const SWARM_FLAG = "isSwarm"; 
+const SWARM_SIZE_FLAG = "swarmSize";
+const SWARM_SPEED_FLAG = "swarmSpeed";
 
- const OVER_FLAG = "swarmOverPlayers";
- const SETTING_HP_REDUCE = "reduceSwarmWithHP";
- const SIGMA = 5;
- const GAMMA = 1000;
- import * as utils from "./utils.mjs"
+const ANIM_TYPE_FLAG = "animation";
+const ANIM_TYPE_CIRCULAR = "circular";
+const ANIM_TYPE_RAND_SQUARE = "random";
+const ANIM_TYPE_SPIRAL = "spiral";
+const ANIM_TYPES = [ANIM_TYPE_CIRCULAR, ANIM_TYPE_RAND_SQUARE, ANIM_TYPE_SPIRAL];
+
+const OVER_FLAG = "swarmOverPlayers";
+const SETTING_HP_REDUCE = "reduceSwarmWithHP";
+const SIGMA = 5;
+const GAMMA = 1000;
+import * as utils from "./utils.mjs"
 
 function Lang(k){
-   return game.i18n.localize("SWARM."+k);
- }
+    return game.i18n.localize("SWARM."+k);
+}
  
- let SWARMS = {};
+let SWARMS = {};
+window.SWARMS = SWARMS;
 
- export default class Swarm{
+export default class Swarm{
     constructor( token, number ){
         this.t = 0;
         this.token = token;
@@ -66,21 +67,24 @@ function Lang(k){
     async createSprites( number, token, layer ){
         let use_random_image    = token.actor.data.token.randomImg;
         let wildcard_image_path = token.actor.data.token.img;
-
+        
         let images = [];
         if (use_random_image){
-          let res = await FilePicker.browse('data', wildcard_image_path, {wildcard:true});
-          for (let f of res.files){
-            images.push(f);
-          }
+          images = await token.actor.getTokenImages();
         }else{
           images.push(token.document.data.img);
         }
+        
 
         for(let i=0;i<number;++i){
             this.ofsets.push(Math.random()*97);
+            
             let img = images[Math.floor(Math.random()*images.length)];
-            let s = await PIXI.Sprite.from(img);
+          
+            const texture = PIXI.Texture.from(img);
+            let s = await PIXI.Sprite.from(texture);
+            //const videoControler = texture.baseTexture.source;
+            //videoControler.play();
             s.anchor.set(.5);
             s.x = token.data.x;
             s.y = token.data.y;
@@ -91,6 +95,11 @@ function Lang(k){
               s.scale.y = token.data.scale * canvas.grid.size / smax;
               if (token.data.mirrorX) s.scale.x *= -1;
               if (token.data.mirrorY) s.scale.y *= -1;
+
+              s.texture.baseTexture.resource.source.loop = true;
+              s.texture.baseTexture.resource.source.muted = true;
+              if (s.texture.baseTexture.resource.source.play)
+                s.texture.baseTexture.resource.source.play();
             };
             if (s.texture.baseTexture.valid){
               scale();
@@ -140,8 +149,8 @@ function Lang(k){
             let x = Math.cos(t);
             let y = 0.4*Math.sin(t);
 
-            let ci = Math.cos((1/17)*t);
-            let si = Math.sin((1/17)*t);
+            let ci = Math.cos(t/(2*Math.E));
+            let si = Math.sin(t/(2*Math.E));
             this.dest[i] = {x: rx*(ci*x - si*y) + this.token.center.x,
                             y: ry*(si*x + ci*y) + this.token.center.y };
 
@@ -203,7 +212,6 @@ Hooks.on('canvasTearDown', (a,b)=>{
 
 
 Hooks.on('updateToken', (token, change, options, user_id)=>{
-    if (!game.user.isGM) return; // Only at DMs client
     if (change?.flags?.swarm){   // If any swarm related flag was in this update
         deleteSwarmOnToken(token);
         if (token.data?.flags?.[MOD_NAME]?.[SWARM_FLAG]){
