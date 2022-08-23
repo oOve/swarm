@@ -19,11 +19,15 @@ const ANIM_TYPE_FLAG = "animation";
 const ANIM_TYPE_CIRCULAR = "circular";
 const ANIM_TYPE_RAND_SQUARE = "random";
 const ANIM_TYPE_SPIRAL = "spiral";
-const ANIM_TYPES = [ANIM_TYPE_CIRCULAR, ANIM_TYPE_RAND_SQUARE, ANIM_TYPE_SPIRAL];
+const ANIM_TYPE_SKITTER = "skitter";
+const ANIM_TYPE_STOPNMOVE = "move_stop_move";
+const ANIM_TYPES = [ANIM_TYPE_CIRCULAR, ANIM_TYPE_RAND_SQUARE, ANIM_TYPE_SPIRAL,ANIM_TYPE_SKITTER, ANIM_TYPE_STOPNMOVE];
 
 const OVER_FLAG = "swarmOverPlayers";
 const SETTING_HP_REDUCE = "reduceSwarmWithHP";
 const SETTING_FADE_TIME = "fadeTime";
+const SETTING_STOP_TIME = "stopTime";
+const theta = 0.01;
 const SIGMA = 5;
 const GAMMA = 1000;
 import * as utils from "./utils.mjs"
@@ -50,7 +54,17 @@ async function wildcards(token_id){
   }
 }
 
-
+function getHealthEstimate(token){
+  switch (game.system.id){
+    case 'dnd5e':
+      return token.actor.data.data.attributes.hp.value / token.actor.data.data.attributes.hp.max;
+    
+    default:
+      console.warn("No health estimate implemented for system", game.system.id);
+  }
+  
+  
+}
 
  
 let SWARMS = {};
@@ -66,6 +80,7 @@ export default class Swarm{
         this.dest   = [];
         this.speeds = [];
         this.ofsets = [];
+        this.waiting= [];
         
         this.faded  = token.data.hidden;
         this.visible= (token.data.hidden)?0:number;
@@ -86,6 +101,12 @@ export default class Swarm{
           case ANIM_TYPE_SPIRAL:
             this.set_destinations = this.spiral;
             break;
+          case ANIM_TYPE_SKITTER:
+            this.set_destinations = this.skitter;
+            break;
+          case ANIM_TYPE_STOPNMOVE:
+            this.set_destinations = this.stopMoveStop;
+            break;
         }
         this.tick.add( this.anim.bind(this) );
         this.tick.start();
@@ -103,12 +124,14 @@ export default class Swarm{
         }
 
         for(let i=0;i<number;++i){
+            // waiting times, only used for stop-move
+            this.waiting.push(0);
             // Random offset
             this.ofsets.push(Math.random()*97);
             // Pick an image from the list at random
             let img = images[Math.floor(Math.random()*images.length)];          
-            const texture = PIXI.Texture.from(img);
-            let s = await PIXI.Sprite.from(texture);
+            //const texture = PIXI.Texture.from(img);
+            let s = PIXI.Sprite.from(img);
             s.anchor.set(.5);
             // Sprites initial position, a random position within this tokens area
             s.x = token.data.x + Math.random()*(canvas.grid.size*token.data.width);
@@ -191,6 +214,56 @@ export default class Swarm{
         this.tick.destroy();        
     }
 
+    skitter(ms) {
+        this.randSquare(ms);
+
+        let pcs = canvas.tokens.placeables.filter(t=>t.actor.hasPlayerOwner);
+        let pcp = pcs.map(t=>t.center);
+        let occ = pcs.map(t=>(.55*t.data.width*canvas.grid.size)**2);
+
+        if (pcs.length>0){
+            for (let i=0; i<this.sprites.length;++i){
+                let s = this.sprites[i];
+                let sp = {x:s.x, y:s.y};
+                let dists2 = pcp.map(p=>{return (s.x-p.x)**2+ (s.y-p.y)**2});
+                let smallest = utils.argMin(dists2);
+                if (dists2[smallest]<occ[smallest]){
+                    // We are "inside" a player
+                    let out = utils.vSub(sp,pcp[smallest]);
+                    if ((out.x**2+out.y**2) > theta){
+                        let shortest_direction_out_normed = utils.vNorm(out);
+                        let distance_left_out = 0.1 + Math.sqrt(occ[smallest]) - Math.sqrt(dists2[smallest]);
+                        this.dest[i] = utils.vAdd(sp, utils.vMult(shortest_direction_out_normed, 1.5*distance_left_out));
+                    }
+                }
+            }
+        }
+    }
+
+    stopMoveStop(ms){
+      for (let i=0; i<this.sprites.length;++i){
+        let s = this.sprites[i];
+        let d = utils.vSub(this.dest[i], {x:s.x, y:s.y});
+        if (d.x**2+d.y**2 < SIGMA){
+          if (this.waiting[i]<=0){
+            let x = this.token.data.x + Math.random() * this.token.data.width  * canvas.grid.size;
+            let y = this.token.data.y + Math.random() * this.token.data.height * canvas.grid.size;
+            this.dest[i] = {x:x,y:y};
+            this.waiting[i] = Math.random()*game.settings.get(MOD_NAME, SETTING_STOP_TIME)*1000;
+            let src = s.texture.baseTexture.resource.source;
+            
+            src.loop = true;
+            if (src.play) src.play();
+          }
+          else{
+            let src = s.texture.baseTexture.resource.source;
+            src.loop = false;
+            this.waiting[i]-=ms;
+          }
+        }
+      }
+
+    }
     
     randSquare(ms){
       for (let i=0; i<this.sprites.length;++i){
@@ -249,13 +322,15 @@ export default class Swarm{
         for (let i=0; i<this.sprites.length;++i){
             let s = this.sprites[i];
             let d = utils.vSub( this.dest[i], {x:s.x, y:s.y} );
-
-            let mv = utils.vNorm(d);
-            mv = utils.vMult(mv, 0.05*ms*this.speeds[i]*4);
-            if ((mv.x**2+mv.y**2)>(d.x**2+d.y**2)){mv=d;}
-            s.x += mv.x;
-            s.y += mv.y;
-            s.rotation = -Math.PI/2. + utils.vRad(d);
+            
+            if ((d.x**2+d.y**2) > theta){
+                let mv = utils.vNorm(d);
+                mv = utils.vMult(mv, 0.05*ms*this.speeds[i]*4);
+                if ((mv.x**2+mv.y**2)>(d.x**2+d.y**2)){mv=d;}
+                s.x += mv.x;
+                s.y += mv.y;
+                s.rotation = -Math.PI/2. + utils.vRad(d);
+            }
         }
     }
 }
@@ -369,6 +444,14 @@ Hooks.on("canvasReady", ()=> {
         type: Number,
         default: 2.0
     });
+    game.settings.register(MOD_NAME, SETTING_STOP_TIME, {
+      name: "Stop time",
+      hint: "How long, in seconds, the stop in the stop move animation",
+      scope: 'world',
+      config: true,
+      type: Number,
+      default: 5.0
+  });
 
   
  });
@@ -475,7 +558,7 @@ function textBoxConfig(parent, app, flag_name, title, type="number",
     formFields.classList.add("form-fields");
     formGroup.append(formFields);
   
-    createCheckBox(app, formFields, SWARM_FLAG, "Swarm", '');
+    createCheckBox(app, formFields, SWARM_FLAG, "", '');
     createCheckBox(app, formFields, OVER_FLAG, "Over", "Check if the swarm should be placed over players." );
     textBoxConfig(formFields, app, SWARM_SIZE_FLAG, "Count", "number", 20, 20,1);
     textBoxConfig(formFields, app, SWARM_SPEED_FLAG, "Speed", "number", 1.0, 1.0, 0.1);
