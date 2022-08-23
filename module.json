@@ -24,6 +24,12 @@
       "path": "lang/en.json"      
     }
   ],
+  "socket": true,
+  "relationships": {     
+    "requires": [
+      {"id":"socketlib", "type": "module"}
+    ]
+  },
   "license": "LICENSE",
   "readme": "README.md",
   "compatibility": {

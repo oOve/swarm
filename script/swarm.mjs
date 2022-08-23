@@ -23,6 +23,7 @@ const ANIM_TYPES = [ANIM_TYPE_CIRCULAR, ANIM_TYPE_RAND_SQUARE, ANIM_TYPE_SPIRAL]
 
 const OVER_FLAG = "swarmOverPlayers";
 const SETTING_HP_REDUCE = "reduceSwarmWithHP";
+const SETTING_FADE_TIME = "fadeTime";
 const SIGMA = 5;
 const GAMMA = 1000;
 import * as utils from "./utils.mjs"
@@ -30,92 +31,156 @@ import * as utils from "./utils.mjs"
 function Lang(k){
     return game.i18n.localize("SWARM."+k);
 }
+
+
+let swarm_socket;
+Hooks.once("socketlib.ready", () => {
+  // socketlib is activated, lets register our function moveAsGM
+	swarm_socket = socketlib.registerModule(MOD_NAME);	
+	swarm_socket.register("wildcards", wildcards);
+});
+
+async function wildcards(token_id){
+  let tk = canvas.tokens.get(token_id);
+  if(tk){
+    return await tk.actor.getTokenImages();
+  }
+  else{
+    return [];
+  }
+}
+
+
+
  
 let SWARMS = {};
+// TODO: Remove debug accessor
 window.SWARMS = SWARMS;
 
 export default class Swarm{
     constructor( token, number ){
         this.t = 0;
-        this.token = token;
-        this.sprites = [];
-        this.dest = [];
+        this.number = number;
+        this.token  = token;
+        this.sprites= [];
+        this.dest   = [];
         this.speeds = [];
         this.ofsets = [];
+        
+        this.faded  = token.data.hidden;
+        this.visible= (token.data.hidden)?0:number;
 
         let layer = (token.document.getFlag(MOD_NAME, OVER_FLAG)?canvas.foreground:canvas.background);        
         this.createSprites(number, token, layer);
         
         this.tick = new PIXI.Ticker();
         let anim = token.document.getFlag(MOD_NAME, ANIM_TYPE_FLAG);
-        let method = this.circular;
+        this.set_destinations = this.circular;
         switch(anim){
           case ANIM_TYPE_CIRCULAR:
-            method = this.circular;
+            this.set_destinations = this.circular;
             break;
           case ANIM_TYPE_RAND_SQUARE:
-            method = this.randSquare;
+            this.set_destinations = this.randSquare;
             break;
           case ANIM_TYPE_SPIRAL:
-            method = this.spiral;
+            this.set_destinations = this.spiral;
             break;
         }
-        this.tick.add( method.bind(this) );
+        this.tick.add( this.anim.bind(this) );
         this.tick.start();
-    }    
+    }
     
     async createSprites( number, token, layer ){
         let use_random_image    = token.actor.data.token.randomImg;
-        let wildcard_image_path = token.actor.data.token.img;
         
         let images = [];
-        if (use_random_image){
-          images = await token.actor.getTokenImages();
+        if (use_random_image){            
+            images = await swarm_socket.executeAsGM("wildcards",token.id);
+            //images = await token.actor.getTokenImages();
         }else{
           images.push(token.document.data.img);
         }
-        
 
         for(let i=0;i<number;++i){
+            // Random offset
             this.ofsets.push(Math.random()*97);
-            
-            let img = images[Math.floor(Math.random()*images.length)];
-          
+            // Pick an image from the list at random
+            let img = images[Math.floor(Math.random()*images.length)];          
             const texture = PIXI.Texture.from(img);
             let s = await PIXI.Sprite.from(texture);
-            //const videoControler = texture.baseTexture.source;
-            //videoControler.play();
             s.anchor.set(.5);
-            s.x = token.data.x;
-            s.y = token.data.y;
+            // Sprites initial position, a random position within this tokens area
+            s.x = token.data.x + Math.random()*(canvas.grid.size*token.data.width);
+            s.y = token.data.y + Math.random()*(canvas.grid.size*token.data.height);
+            // Hiden initially?
+            s.alpha = (token.data.hidden)?0:1;
 
-            let scale = ()=>{
-              let smax = Math.max(s.texture.width, s.texture.height);
-              s.scale.x = token.data.scale * canvas.grid.size / smax;
-              s.scale.y = token.data.scale * canvas.grid.size / smax;
-              if (token.data.mirrorX) s.scale.x *= -1;
-              if (token.data.mirrorY) s.scale.y *= -1;
-
-              s.texture.baseTexture.resource.source.loop = true;
-              s.texture.baseTexture.resource.source.muted = true;
-              if (s.texture.baseTexture.resource.source.play)
-                s.texture.baseTexture.resource.source.play();
+            // A callback to get correct aspect ratio, and to start the video
+            let scale = ()=>{              
+                // Get the largest dimention, and scale around that
+                let smax = Math.max(s.texture.width, s.texture.height);
+                s.scale.x = token.data.scale * canvas.grid.size / smax;
+                s.scale.y = token.data.scale * canvas.grid.size / smax;
+                // Is the tokens original image flipped vert/horiz
+                if (token.data.mirrorX) s.scale.x *= -1;
+                if (token.data.mirrorY) s.scale.y *= -1;
+                // Check if the texture selected is a video, and potentially start it
+                let src = s.texture.baseTexture.resource.source;
+                src.loop = true;
+                src.muted = true; // Autostarting videos must explicitly be muted (chrome restriction)
+                if (src.play) src.play();
             };
             if (s.texture.baseTexture.valid){
               scale();
             }else{
               s.texture.baseTexture.on('loaded', scale);
-            }
-            
-            this.dest.push({x:token.x, y:token.y});
+            }            
+            // Set the initial destination to its initial position
+            this.dest.push({x:s.x, y:s.y});
             this.sprites.push(s);
             let sf = token.document.getFlag(MOD_NAME, SWARM_SPEED_FLAG);
             if (sf===undefined) sf = 1;
+            // Add 50% of the speed as variability on each sprites speed
             this.speeds.push( sf*.5 + sf * Math.random()*0.5 )
+            // Add this sprite to the correct layer
             layer.addChild(s);
         }
     }
 
+    /**
+     * The main animation callback for this swarm
+     * @param {Number} t Time fraction of the current fps
+     */
+    anim(t){
+        t = Math.min(t,2.0);// Cap frame skip to two frames
+        // Milliseconds elapsed, as calculated using the "time" fraction and current fps
+        let ms = t*1000*(1.0/this.tick.FPS);
+        let fd = game.settings.get(MOD_NAME, SETTING_FADE_TIME);
+        // step, corresponding to the module setting "fade time", also, prevent division by zero
+        let step = (fd==0)?(this.number):(ms*this.number)/(fd*1000);
+
+        if (this.faded && (this.visible>0)){ 
+            // We should be faded/hidden, and we still have critters visible
+            this.visible -= step;
+            this.sprites.forEach((s,i)=>{s.alpha = (i>=this.visible)?0:1});
+        }
+        if (!this.faded && (this.visible<this.number)){ 
+            // We should be visible, and we still have critters hidden
+            this.visible += step;
+            this.sprites.forEach((s,i)=>{s.alpha = (i>this.visible)?0:1});
+        }
+        // Calling the animation specific method, set_destination
+        this.set_destinations(ms);
+        // Calling the generic move method
+        this.move(ms);
+    }
+
+    hide(hidden){
+        this.faded = hidden;
+    }
+
+    // TODO: HP interaction    
     kill(percentage){
     }
       
@@ -126,6 +191,7 @@ export default class Swarm{
         this.tick.destroy();        
     }
 
+    
     randSquare(ms){
       for (let i=0; i<this.sprites.length;++i){
         let s = this.sprites[i];
@@ -137,11 +203,9 @@ export default class Swarm{
           this.dest[i] = {x:x,y:y};
         }
       }
-      this.move(ms);
     }
-
     spiral(ms){
-        this.t += ms;
+        this.t += ms/30;
         let rx =  0.5 * canvas.grid.size * this.token.data.width;
         let ry =  0.5 * canvas.grid.size * this.token.data.height;
         for (let i=0; i<this.sprites.length;++i){
@@ -153,14 +217,10 @@ export default class Swarm{
             let si = Math.sin(t/(2*Math.E));
             this.dest[i] = {x: rx*(ci*x - si*y) + this.token.center.x,
                             y: ry*(si*x + ci*y) + this.token.center.y };
-
         }
-        this.move(ms);
     }
-
-
     circular(ms){
-        this.t += ms;        
+        this.t += ms/30;        
         let _rx = 1 * 0.5 * canvas.grid.size * this.token.data.width;
         let _ry = 1 * 0.5 * canvas.grid.size * this.token.data.height;
 
@@ -183,7 +243,6 @@ export default class Swarm{
             this.dest[i] = {x:rx + this.token.center.x,
                             y:ry + this.token.center.y};
         }
-        this.move(ms);
     }
 
     move(ms){
@@ -192,7 +251,7 @@ export default class Swarm{
             let d = utils.vSub( this.dest[i], {x:s.x, y:s.y} );
 
             let mv = utils.vNorm(d);
-            mv = utils.vMult(mv, ms*this.speeds[i]*4);
+            mv = utils.vMult(mv, 0.05*ms*this.speeds[i]*4);
             if ((mv.x**2+mv.y**2)>(d.x**2+d.y**2)){mv=d;}
             s.x += mv.x;
             s.y += mv.y;
@@ -210,6 +269,25 @@ Hooks.on('canvasTearDown', (a,b)=>{
       }
 });
 
+function deleteSwarmOnToken(token){
+    if (token.id in SWARMS){
+        SWARMS[token.id].destroy();
+        delete SWARMS[token.id];
+    }
+}
+function createSwarmOnToken(token){
+  SWARMS[token.id] = new Swarm(token, token.document.getFlag(MOD_NAME, SWARM_SIZE_FLAG));
+  if (!game.user.isGM){
+    token.alpha = 0;
+  }
+}
+function hideSwarmOnToken(token, hide){
+    if (token.id in SWARMS){
+        SWARMS[token.id].hide(hide);
+    }
+}
+
+
 
 Hooks.on('updateToken', (token, change, options, user_id)=>{
     if (change?.flags?.swarm){   // If any swarm related flag was in this update
@@ -220,8 +298,9 @@ Hooks.on('updateToken', (token, change, options, user_id)=>{
     }
 
     if (change.hidden != undefined && token.data?.flags?.[MOD_NAME]?.[SWARM_FLAG]){
-        if(change.hidden) deleteSwarmOnToken(token);
-        else createSwarmOnToken(canvas.tokens.get(token.id));
+        hideSwarmOnToken(token, change.hidden);
+        //if(change.hidden) deleteSwarmOnToken(token);
+        //else createSwarmOnToken(canvas.tokens.get(token.id));
     }
     
 
@@ -231,7 +310,6 @@ Hooks.on('updateToken', (token, change, options, user_id)=>{
 
 // TODO: Add HP interaction
 Hooks.on('updateActor', (actor, change, options, user_id)=>{
-
     let val = change.data?.attributes?.hp?.value;
     if (val == undefined){
         val = change.system?.attributes?.hp?.value;
@@ -241,22 +319,8 @@ Hooks.on('updateActor', (actor, change, options, user_id)=>{
       let mx = actor.data.data.attributes.hp.max;
       let hp = 100*val/mx;
     }
-
 });
 
-function deleteSwarmOnToken(token){
-    if (token.id in SWARMS){
-        SWARMS[token.id].destroy();
-        delete SWARMS[token.id];
-    }
-}
-
-function createSwarmOnToken(token){
-  SWARMS[token.id] = new Swarm(token, token.document.getFlag(MOD_NAME, SWARM_SIZE_FLAG));
-  if (!game.user.isGM){
-    token.alpha = 0;
-  }
-}
 
 // Delete token
 Hooks.on('deleteToken', (token, options, user_id)=>{
@@ -278,8 +342,7 @@ Hooks.on("canvasReady", ()=> {
     let swarm = canvas.tokens.placeables.filter( (t)=>{return t.document.getFlag(MOD_NAME,SWARM_FLAG);} ) 
     //console.error("canvasReady",swarm);
     for (let s of swarm){
-        if (s.document.hidden===false)
-            createSwarmOnToken(s);
+        createSwarmOnToken(s);
     }
 });
 
@@ -287,7 +350,8 @@ Hooks.on("canvasReady", ()=> {
  
  // Settings:
  Hooks.once("init", () => {
-    
+  
+    /*
     game.settings.register(MOD_NAME, SETTING_HP_REDUCE, {
         name: "Reduce swarm with HP",
         hint: "Reduce the swarm as HP decreases, requires support for your system",
@@ -296,6 +360,16 @@ Hooks.on("canvasReady", ()=> {
         type: Boolean,
         default: false
    });
+   */
+    game.settings.register(MOD_NAME, SETTING_FADE_TIME, {
+        name: "Fade time",
+        hint: "How long, in seconds, the fade in/out should take",
+        scope: 'world',
+        config: true,
+        type: Number,
+        default: 2.0
+    });
+
   
  });
  
