@@ -209,6 +209,9 @@ export const dsu = (arr1, arr2) => arr1
     .sort(([arg1], [arg2]) => arg2 - arg1) // sort by the args
     .map(([, item]) => item); // extract the sorted items
 
+export const argFact = (compareFn) => (array) => array.map((el, idx) => [el, idx]).reduce(compareFn)[1];
+export const argMax = argFact((min, el) => (el[0] > min[0] ? el : min));
+export const argMin = argFact((max, el) => (el[0] < max[0] ? el : max));
 
 /**
  * @param {Set} setA 
