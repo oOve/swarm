@@ -56,6 +56,8 @@ async function wildcards(token_id){
 
 function getHealthEstimate(token){
   switch (game.system.id){
+    case 'pf1':
+    case 'pf2e':
     case 'dnd5e':
       return token.actor.data.data.attributes.hp.value / token.actor.data.data.attributes.hp.max;
     
@@ -215,7 +217,7 @@ export default class Swarm{
     }
 
     skitter(ms) {
-        this.randSquare(ms);
+        this.stopMoveStop(ms);
 
         let pcs = canvas.tokens.placeables.filter(t=>t.actor.hasPlayerOwner);
         let pcp = pcs.map(t=>t.center);
