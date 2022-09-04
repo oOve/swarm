@@ -252,14 +252,14 @@ export default class Swarm{
             let y = this.token.data.y + Math.random() * this.token.data.height * canvas.grid.size;
             this.dest[i] = {x:x,y:y};
             this.waiting[i] = Math.random()*game.settings.get(MOD_NAME, SETTING_STOP_TIME)*1000;
-            let src = s.texture.baseTexture.resource.source;
             
-            src.loop = true;
-            if (src.play) src.play();
+            //let src = s.texture.baseTexture.resource.source;            
+            //src.loop = true;
+            //if (src.play) src.play();
           }
           else{
-            let src = s.texture.baseTexture.resource.source;
-            src.loop = false;
+            //let src = s.texture.baseTexture.resource.source;
+            //src.loop = false;
             this.waiting[i]-=ms;
           }
         }

@@ -3,7 +3,7 @@
   "id": "swarm",
   "title": "Swarms",
   "description": "Animate swarms.",
-  "version": "9.0.5",
+  "version": "9.0.6",
   "authors": [
     {
       "name": "o_Ove",
@@ -15,7 +15,7 @@
     "script/swarm.mjs"
   ],
   "url": "https://github.com/oOve/swarm",
-  "download": "https://github.com/oOve/swarm/archive/9.0.5.zip",
+  "download": "https://github.com/oOve/swarm/archive/9.0.6.zip",
   "manifest": "https://github.com/oOve/swarm/releases/latest/download/module.json",
   "languages": [
     {
