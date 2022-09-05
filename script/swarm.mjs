@@ -93,6 +93,7 @@ export default class Swarm{
         //let layer = canvas.primary;
         
         this.layer.elevation = (token.document.getFlag(MOD_NAME, OVER_FLAG)?10000:0);
+        this.layer.sort = 120; // Above tiles at 100
         canvas.primary.addChild(this.layer);
         this.createSprites(number, token, this.layer);
         
