@@ -83,12 +83,18 @@ export default class Swarm{
         this.speeds = [];
         this.ofsets = [];
         this.waiting= [];
+        this.layer = new PIXI.Container();
         
-        this.faded  = token.data.hidden;
-        this.visible= (token.data.hidden)?0:number;
+        this.faded  = token.hidden;
+        this.visible= (token.hidden)?0:number;
 
-        let layer = (token.document.getFlag(MOD_NAME, OVER_FLAG)?canvas.foreground:canvas.background);        
-        this.createSprites(number, token, layer);
+        // let layer = (token.document.getFlag(MOD_NAME, OVER_FLAG)?canvas.foreground:canvas.background);        
+        //let layer = (token.document.getFlag(MOD_NAME, OVER_FLAG)?canvas.tiles:canvas.tokens);
+        //let layer = canvas.primary;
+        
+        this.layer.elevation = (token.document.getFlag(MOD_NAME, OVER_FLAG)?10000:0);
+        canvas.primary.addChild(this.layer);
+        this.createSprites(number, token, this.layer);
         
         this.tick = new PIXI.Ticker();
         let anim = token.document.getFlag(MOD_NAME, ANIM_TYPE_FLAG);
@@ -115,14 +121,14 @@ export default class Swarm{
     }
     
     async createSprites( number, token, layer ){
-        let use_random_image    = token.actor.data.token.randomImg;
+        let use_random_image    = token.actor.prototypeToken.randomImg;
         
         let images = [];
         if (use_random_image){            
             images = await swarm_socket.executeAsGM("wildcards",token.id);
             //images = await token.actor.getTokenImages();
         }else{
-          images.push(token.document.data.img);
+          images.push(token.document.texture.src);
         }
 
         for(let i=0;i<number;++i){
@@ -136,20 +142,18 @@ export default class Swarm{
             let s = PIXI.Sprite.from(img);
             s.anchor.set(.5);
             // Sprites initial position, a random position within this tokens area
-            s.x = token.data.x + Math.random()*(canvas.grid.size*token.data.width);
-            s.y = token.data.y + Math.random()*(canvas.grid.size*token.data.height);
+            s.x = token.x + Math.random()*token.w;
+            s.y = token.y + Math.random()*token.h;
             // Hiden initially?
-            s.alpha = (token.data.hidden)?0:1;
+            s.alpha = (token.hidden)?0:1;
 
             // A callback to get correct aspect ratio, and to start the video
             let scale = ()=>{              
                 // Get the largest dimention, and scale around that
                 let smax = Math.max(s.texture.width, s.texture.height);
-                s.scale.x = token.data.scale * canvas.grid.size / smax;
-                s.scale.y = token.data.scale * canvas.grid.size / smax;
-                // Is the tokens original image flipped vert/horiz
-                if (token.data.mirrorX) s.scale.x *= -1;
-                if (token.data.mirrorY) s.scale.y *= -1;
+                s.scale.x = token.document.texture.scaleX * canvas.grid.size / smax;
+                s.scale.y = token.document.texture.scaleY * canvas.grid.size / smax;
+                
                 // Check if the texture selected is a video, and potentially start it
                 let src = s.texture.baseTexture.resource.source;
                 src.loop = true;
@@ -214,6 +218,7 @@ export default class Swarm{
             s.destroy();
         }
         this.tick.destroy();        
+        this.layer.destroy();
     }
 
     skitter(ms) {
@@ -221,7 +226,7 @@ export default class Swarm{
 
         let pcs = canvas.tokens.placeables.filter(t=>t.actor.hasPlayerOwner);
         let pcp = pcs.map(t=>t.center);
-        let occ = pcs.map(t=>(.55*t.data.width*canvas.grid.size)**2);
+        let occ = pcs.map(t=>(.55*t.w)**2);
 
         if (pcs.length>0){
             for (let i=0; i<this.sprites.length;++i){
@@ -248,8 +253,8 @@ export default class Swarm{
         let d = utils.vSub(this.dest[i], {x:s.x, y:s.y});
         if (d.x**2+d.y**2 < SIGMA){
           if (this.waiting[i]<=0){
-            let x = this.token.data.x + Math.random() * this.token.data.width  * canvas.grid.size;
-            let y = this.token.data.y + Math.random() * this.token.data.height * canvas.grid.size;
+            let x = this.token.x + Math.random() * this.token.w;
+            let y = this.token.y + Math.random() * this.token.h;
             this.dest[i] = {x:x,y:y};
             this.waiting[i] = Math.random()*game.settings.get(MOD_NAME, SETTING_STOP_TIME)*1000;
             
@@ -273,16 +278,16 @@ export default class Swarm{
         let d = utils.vSub(this.dest[i], {x:s.x, y:s.y});
         let len = utils.vLen(d);
         if (len<SIGMA || len>GAMMA){
-          let x = this.token.data.x + Math.random() * this.token.data.width  * canvas.grid.size;
-          let y = this.token.data.y + Math.random() * this.token.data.height * canvas.grid.size;
+          let x = this.token.x + Math.random() * this.token.w;
+          let y = this.token.y + Math.random() * this.token.h;
           this.dest[i] = {x:x,y:y};
         }
       }
     }
     spiral(ms){
         this.t += ms/30;
-        let rx =  0.5 * canvas.grid.size * this.token.data.width;
-        let ry =  0.5 * canvas.grid.size * this.token.data.height;
+        let rx =  0.5 * this.token.w;
+        let ry =  0.5 * this.token.h;
         for (let i=0; i<this.sprites.length;++i){
             let t = this.speeds[i] * this.t*0.02 + this.ofsets[i];
             let x = Math.cos(t);
@@ -296,8 +301,8 @@ export default class Swarm{
     }
     circular(ms){
         this.t += ms/30;        
-        let _rx = 1 * 0.5 * canvas.grid.size * this.token.data.width;
-        let _ry = 1 * 0.5 * canvas.grid.size * this.token.data.height;
+        let _rx = 1 * 0.5 * this.token.w;
+        let _ry = 1 * 0.5 * this.token.h;
 
         for (let i=0; i<this.sprites.length;++i){
             
@@ -369,15 +374,13 @@ function hideSwarmOnToken(token, hide){
 Hooks.on('updateToken', (token, change, options, user_id)=>{
     if (change?.flags?.swarm){   // If any swarm related flag was in this update
         deleteSwarmOnToken(token);
-        if (token.data?.flags?.[MOD_NAME]?.[SWARM_FLAG]){
+        if (token.flags?.[MOD_NAME]?.[SWARM_FLAG]){
             createSwarmOnToken(canvas.tokens.get(token.id));
         }
     }
 
-    if (change.hidden != undefined && token.data?.flags?.[MOD_NAME]?.[SWARM_FLAG]){
+    if (change.hidden != undefined && token.flags?.[MOD_NAME]?.[SWARM_FLAG]){
         hideSwarmOnToken(token, change.hidden);
-        //if(change.hidden) deleteSwarmOnToken(token);
-        //else createSwarmOnToken(canvas.tokens.get(token.id));
     }
     
 

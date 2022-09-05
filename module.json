@@ -3,7 +3,7 @@
   "id": "swarm",
   "title": "Swarms",
   "description": "Animate swarms.",
-  "version": "9.0.6",
+  "version": "10.0.1",
   "authors": [
     {
       "name": "o_Ove",
@@ -15,7 +15,7 @@
     "script/swarm.mjs"
   ],
   "url": "https://github.com/oOve/swarm",
-  "download": "https://github.com/oOve/swarm/archive/9.0.6.zip",
+  "download": "https://github.com/oOve/swarm/archive/10.0.1.zip",
   "manifest": "https://github.com/oOve/swarm/releases/latest/download/module.json",
   "languages": [
     {
@@ -33,7 +33,7 @@
   "license": "LICENSE",
   "readme": "README.md",
   "compatibility": {
-    "minimum": "8",
-    "verified": "9"
+    "minimum": "10",
+    "verified": "10"
   }
 }
