@@ -85,9 +85,9 @@ export default class Swarm{
         this.waiting= [];
         this.layer = new PIXI.Container();
         
-        this.faded  = token.hidden;
-        this.visible= (token.hidden)?0:number;
-
+        this.faded  = token.document.hidden;
+        this.visible= (this.faded)?0:number;
+        console.warn("FAAAAAADE:", this.faded, token);
         // let layer = (token.document.getFlag(MOD_NAME, OVER_FLAG)?canvas.foreground:canvas.background);        
         //let layer = (token.document.getFlag(MOD_NAME, OVER_FLAG)?canvas.tiles:canvas.tokens);
         //let layer = canvas.primary;
@@ -95,6 +95,7 @@ export default class Swarm{
         this.layer.elevation = (token.document.getFlag(MOD_NAME, OVER_FLAG)?10000:0);
         this.layer.sort = 120; // Above tiles at 100
         canvas.primary.addChild(this.layer);
+        
         this.createSprites(number, token, this.layer);
         
         this.tick = new PIXI.Ticker();
@@ -123,7 +124,8 @@ export default class Swarm{
     
     async createSprites( number, token, layer ){
         let use_random_image    = token.actor.prototypeToken.randomImg;
-        
+        let hidden = token.document.hidden;
+
         let images = [];
         if (use_random_image){            
             images = await swarm_socket.executeAsGM("wildcards",token.id);
@@ -142,11 +144,12 @@ export default class Swarm{
             //const texture = PIXI.Texture.from(img);
             let s = PIXI.Sprite.from(img);
             s.anchor.set(.5);
+            
             // Sprites initial position, a random position within this tokens area
             s.x = token.x + Math.random()*token.w;
             s.y = token.y + Math.random()*token.h;
             // Hiden initially?
-            s.alpha = (token.hidden)?0:1;
+            s.alpha = (hidden)?0:1;
 
             // A callback to get correct aspect ratio, and to start the video
             let scale = ()=>{              
