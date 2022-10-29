@@ -14,6 +14,7 @@ const MOD_NAME = "swarm";
 const SWARM_FLAG = "isSwarm"; 
 const SWARM_SIZE_FLAG = "swarmSize";
 const SWARM_SPEED_FLAG = "swarmSpeed";
+const SWARM_IMAGE_FLAG = "swarmImage";
 
 const ANIM_TYPE_FLAG = "animation";
 const ANIM_TYPE_CIRCULAR = "circular";
@@ -21,7 +22,8 @@ const ANIM_TYPE_RAND_SQUARE = "random";
 const ANIM_TYPE_SPIRAL = "spiral";
 const ANIM_TYPE_SKITTER = "skitter";
 const ANIM_TYPE_STOPNMOVE = "move_stop_move";
-const ANIM_TYPES = [ANIM_TYPE_CIRCULAR, ANIM_TYPE_RAND_SQUARE, ANIM_TYPE_SPIRAL,ANIM_TYPE_SKITTER, ANIM_TYPE_STOPNMOVE];
+const ANIM_TYPE_FORMATION_SQUARE = "formation";
+const ANIM_TYPES = [ANIM_TYPE_CIRCULAR, ANIM_TYPE_RAND_SQUARE, ANIM_TYPE_SPIRAL,ANIM_TYPE_SKITTER, ANIM_TYPE_STOPNMOVE, ANIM_TYPE_FORMATION_SQUARE];
 
 const OVER_FLAG = "swarmOverPlayers";
 const SETTING_HP_REDUCE = "reduceSwarmWithHP";
@@ -84,6 +86,8 @@ export default class Swarm{
         this.ofsets = [];
         this.waiting= [];
         this.layer = new PIXI.Container();
+
+        // this.randomRotation = true;
         
         this.faded  = token.document.hidden;
         this.visible= (this.faded)?0:number;
@@ -117,6 +121,10 @@ export default class Swarm{
           case ANIM_TYPE_STOPNMOVE:
             this.set_destinations = this.stopMoveStop;
             break;
+          case ANIM_TYPE_FORMATION_SQUARE:
+            this.set_destinations = this.formSquare;
+            // this.randomRotation = false;
+            break;
         }
         this.tick.add( this.anim.bind(this) );
         this.tick.start();
@@ -125,13 +133,18 @@ export default class Swarm{
     async createSprites( number, token, layer ){
         let use_random_image    = token.actor.prototypeToken.randomImg;
         let hidden = token.document.hidden;
+        let swarm_image = token.document.getFlag(MOD_NAME, SWARM_IMAGE_FLAG);
 
         let images = [];
-        if (use_random_image){            
-            images = await swarm_socket.executeAsGM("wildcards",token.id);
-            //images = await token.actor.getTokenImages();
+        if (swarm_image != undefined){
+            images.push(swarm_image);
         }else{
-          images.push(token.document.texture.src);
+            if (use_random_image){            
+                images = await swarm_socket.executeAsGM("wildcards",token.id);
+                //images = await token.actor.getTokenImages();
+            }else{
+              images.push(token.document.texture.src);
+            }
         }
 
         for(let i=0;i<number;++i){
@@ -207,6 +220,10 @@ export default class Swarm{
         this.set_destinations(ms);
         // Calling the generic move method
         this.move(ms);
+        // Keep rotation
+        // if (!this.randomRotation){
+        //     this.rotation(this.token.document.rotation);
+        // }
     }
 
     hide(hidden){
@@ -273,6 +290,56 @@ export default class Swarm{
           }
         }
       }
+
+    }
+
+    formSquare(ms){
+      //计算长宽
+      let a = Math.ceil(Math.sqrt(this.sprites.length));  //横排人数
+      let b = Math.ceil(this.sprites.length / a);  //竖排人数
+      let c = a - (a * b - this.sprites.length);  //最后一横排人数
+      let angle = this.token.document.rotation * (Math.PI / 180);
+      let center = {  //取中心点
+            x:this.token.x + (0.5 * this.token.w),
+            y:this.token.y + (0.5 * this.token.h)
+      }
+      // console.log(a,b,c)
+      let cons = []
+
+      for (let i=0; i<this.sprites.length;++i){
+        let s = this.sprites[i]; //单个小token对象
+        //计算方阵中的坐标位置
+        let x = this.token.x + (this.token.w / a) * (i % a + 0.5);
+        let y = this.token.y + (this.token.h / b) * (b - Math.floor(i / a) - 0.5);
+        //为最后一排单独处理
+        if (c > 0 && i >= (this.sprites.length - c)){
+            x = this.token.x + (this.token.w / c) * (i % c + 0.5);
+        }
+
+        cons.push({
+            i:i,
+            x:i % a,
+            y:b - Math.floor(i / a),
+            l:this.sprites.length - c -1
+        });
+
+        //跟随token方向旋转方阵
+        let x3 = (x - center.x) * Math.cos(angle) - (y - center.y) * Math.sin(angle) + center.x;
+        let y3 = (x - center.x) * Math.sin(angle) + (y - center.y) * Math.cos(angle) + center.y;
+        x = x3;
+        y = y3;
+
+        //当与方阵中应该在的位置足够近时转向为token的方向。
+        let d = utils.vSub({x:x,y:y}, {x:s.x, y:s.y});
+        let len = utils.vLen(d);
+        if(len<SIGMA){
+            s.rotation = angle;
+        }else{
+            this.dest[i] = {x:x,y:y};
+        }
+      }
+
+      // console.log(cons);
 
     }
     
@@ -344,6 +411,13 @@ export default class Swarm{
             }
         }
     }
+    // rotation(rotation){
+    //     for (let i=0; i<this.sprites.length;++i){
+    //         let s = this.sprites[i];     
+    //         s.rotation = rotation * (Math.PI / 180);
+    //         // console.log(s.rotation)
+    //     }
+    // }
 }
 
 
@@ -546,6 +620,56 @@ function textBoxConfig(parent, app, flag_name, title, type="number",
     fields.append(label);
     fields.append(input);
   }
+ function imageSelector( app, flag_name, title ){
+  let data_path = 'flags.'+MOD_NAME+'.'+flag_name;
+  
+  let flags = app.token.flags;
+  if (flags === undefined) flags = app.token.data.flags;
+  
+  let grp = document.createElement('div');
+  grp.classList.add('form-group');
+  let label = document.createElement('label');
+  label.innerText = title;  
+  let fields = document.createElement('div');
+  fields.classList.add('form-fields');
+  
+  const button = document.createElement("button");
+  button.classList.add("file-picker");
+  button.type = "button";
+  button.title = "Browse Files";
+  button.tabindex = "-1";
+  button.dataset.target = data_path;
+  button['data-type'] = "imagevideo";
+  button['data-target'] = data_path;
+ 
+  button.onclick = app._activateFilePicker.bind(app);
+  
+  let bi = document.createElement('i');
+  bi.classList.add('fas');
+  bi.classList.add('fa-file-import');
+  bi.classList.add('fa-fw');
+  
+
+  const inpt = document.createElement("input");  
+  inpt.name = data_path;
+  inpt.classList.add("image");
+  inpt.type = "text";
+  inpt.title = title;
+  inpt.placeholder = "path/image.png";
+  // Insert the flags current value into the input box  
+  if (flags?.[MOD_NAME]?.[flag_name]){
+    inpt.value=flags?.[MOD_NAME]?.[flag_name];
+  }
+  
+  button.append(bi);
+
+  grp.append(label);
+  grp.append(fields);
+  
+  fields.append(button);
+  fields.append(inpt);
+  return grp;
+ }
   
   
   // Hook into the token config render
@@ -566,6 +690,9 @@ function textBoxConfig(parent, app, flag_name, title, type="number",
     const formFields = document.createElement("div");
     formFields.classList.add("form-fields");
     formGroup.append(formFields);
+
+    // Add difference swarm image
+    const swarmImage = imageSelector(app, SWARM_IMAGE_FLAG, "Token for Swarm mobs");
   
     createCheckBox(app, formFields, SWARM_FLAG, "", '');
     createCheckBox(app, formFields, OVER_FLAG, "Over", "Check if the swarm should be placed over players." );
@@ -575,6 +702,9 @@ function textBoxConfig(parent, app, flag_name, title, type="number",
 
     // Add the form group to the bottom of the Identity tab
     html[0].querySelector("div[data-tab='character']").append(formGroup);
+
+    // And add the token image selectors to the 'apperance' tab
+    html[0].querySelector("div[data-tab='appearance']").append(swarmImage);
   
     // Set the apps height correctly
     app.setPosition();
