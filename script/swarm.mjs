@@ -303,25 +303,16 @@ export default class Swarm{
             x:this.token.x + (0.5 * this.token.w),
             y:this.token.y + (0.5 * this.token.h)
       }
-      // console.log(a,b,c)
-      let cons = []
 
       for (let i=0; i<this.sprites.length;++i){
         let s = this.sprites[i]; //单个小token对象
         //计算方阵中的坐标位置
-        let x = this.token.x + (this.token.w / a) * (i % a + 0.5);
-        let y = this.token.y + (this.token.h / b) * (b - Math.floor(i / a) - 0.5);
-        //为最后一排单独处理
-        if (c > 0 && i >= (this.sprites.length - c)){
+        let x = this.token.x + (this.token.w / a) * ((i - c) % a + 0.5);
+        let y = this.token.y + (this.token.h / b) * (Math.floor((i - c) / a) + 1.5);
+        //为第一排单独处理
+        if (c > 0 && i < c){
             x = this.token.x + (this.token.w / c) * (i % c + 0.5);
         }
-
-        cons.push({
-            i:i,
-            x:i % a,
-            y:b - Math.floor(i / a),
-            l:this.sprites.length - c -1
-        });
 
         //跟随token方向旋转方阵
         let x3 = (x - center.x) * Math.cos(angle) - (y - center.y) * Math.sin(angle) + center.x;
@@ -339,7 +330,6 @@ export default class Swarm{
         }
       }
 
-      // console.log(cons);
 
     }
     
