@@ -87,20 +87,17 @@ export default class Swarm{
         this.waiting= [];
         this.layer = new PIXI.Container();
 
-        // this.randomRotation = true;
-        
+        // this.randomRotation = true;        
         this.faded  = token.document.hidden;
         this.visible= (this.faded)?0:number;
-        console.warn("FAAAAAADE:", this.faded, token);
-        // let layer = (token.document.getFlag(MOD_NAME, OVER_FLAG)?canvas.foreground:canvas.background);        
-        //let layer = (token.document.getFlag(MOD_NAME, OVER_FLAG)?canvas.tiles:canvas.tokens);
-        //let layer = canvas.primary;
+
         
         this.layer.elevation = (token.document.getFlag(MOD_NAME, OVER_FLAG)?10000:0);
         this.layer.sort = 120; // Above tiles at 100
         canvas.primary.addChild(this.layer);
-        
-        this.createSprites(number, token, this.layer);
+                
+        this.created = false;
+        //this.createSprites(number, token, this.layer);
         
         this.tick = new PIXI.Ticker();
         let anim = token.document.getFlag(MOD_NAME, ANIM_TYPE_FLAG);
@@ -133,18 +130,12 @@ export default class Swarm{
     async createSprites( number, token, layer ){
         let use_random_image    = token.actor.prototypeToken.randomImg;
         let hidden = token.document.hidden;
-        let swarm_image = token.document.getFlag(MOD_NAME, SWARM_IMAGE_FLAG);
 
         let images = [];
-        if (swarm_image != undefined){
-            images.push(swarm_image);
+        if (use_random_image){            
+            images = await swarm_socket.executeAsGM("wildcards",token.id);                
         }else{
-            if (use_random_image){            
-                images = await swarm_socket.executeAsGM("wildcards",token.id);
-                //images = await token.actor.getTokenImages();
-            }else{
-              images.push(token.document.texture.src);
-            }
+          images.push(token.document.texture.src);
         }
 
         for(let i=0;i<number;++i){
@@ -153,8 +144,7 @@ export default class Swarm{
             // Random offset
             this.ofsets.push(Math.random()*97);
             // Pick an image from the list at random
-            let img = images[Math.floor(Math.random()*images.length)];          
-            //const texture = PIXI.Texture.from(img);
+            let img = images[Math.floor(Math.random()*images.length)];
             let s = PIXI.Sprite.from(img);
             s.anchor.set(.5);
             
@@ -199,6 +189,11 @@ export default class Swarm{
      * @param {Number} t Time fraction of the current fps
      */
     anim(t){
+        if (!this.created){
+          this.createSprites(this.number, this.token, this.layer);
+          this.created=true;
+        }
+
         t = Math.min(t,2.0);// Cap frame skip to two frames
         // Milliseconds elapsed, as calculated using the "time" fraction and current fps
         let ms = t*1000*(1.0/this.tick.FPS);
@@ -278,14 +273,8 @@ export default class Swarm{
             let y = this.token.y + Math.random() * this.token.h;
             this.dest[i] = {x:x,y:y};
             this.waiting[i] = Math.random()*game.settings.get(MOD_NAME, SETTING_STOP_TIME)*1000;
-            
-            //let src = s.texture.baseTexture.resource.source;            
-            //src.loop = true;
-            //if (src.play) src.play();
           }
           else{
-            //let src = s.texture.baseTexture.resource.source;
-            //src.loop = false;
             this.waiting[i]-=ms;
           }
         }
@@ -294,33 +283,30 @@ export default class Swarm{
     }
 
     formSquare(ms){
-      //计算长宽
-      let a = Math.ceil(Math.sqrt(this.sprites.length));  //横排人数
-      let b = Math.ceil(this.sprites.length / a);  //竖排人数
-      let c = a - (a * b - this.sprites.length);  //最后一横排人数
+      //Calculate length and width
+      let a = Math.ceil(Math.sqrt(this.sprites.length));  //Number of rows
+      let b = Math.ceil(this.sprites.length / a);  //Vertical number
+      let c = a - (a * b - this.sprites.length);  //last row
       let angle = this.token.document.rotation * (Math.PI / 180);
-      let center = {  //取中心点
-            x:this.token.x + (0.5 * this.token.w),
-            y:this.token.y + (0.5 * this.token.h)
-      }
+      let center = this.token.center;
 
       for (let i=0; i<this.sprites.length;++i){
-        let s = this.sprites[i]; //单个小token对象
-        //计算方阵中的坐标位置
+        let s = this.sprites[i];
+        // Calculate the coordinate position in a square matrix
         let x = this.token.x + (this.token.w / a) * ((i - c) % a + 0.5);
         let y = this.token.y + (this.token.h / b) * (Math.floor((i - c) / a) + 1.5);
-        //为第一排单独处理
+        // separate treatment for the first row
         if (c > 0 && i < c){
             x = this.token.x + (this.token.w / c) * (i % c + 0.5);
         }
 
-        //跟随token方向旋转方阵
+        //Rotate the square matrix following the token direction
         let x3 = (x - center.x) * Math.cos(angle) - (y - center.y) * Math.sin(angle) + center.x;
         let y3 = (x - center.x) * Math.sin(angle) + (y - center.y) * Math.cos(angle) + center.y;
         x = x3;
         y = y3;
 
-        //当与方阵中应该在的位置足够近时转向为token的方向。
+        //Turn to the direction of the token when it is close enough to where it should be in the square.
         let d = utils.vSub({x:x,y:y}, {x:s.x, y:s.y});
         let len = utils.vLen(d);
         if(len<SIGMA){
@@ -329,8 +315,6 @@ export default class Swarm{
             this.dest[i] = {x:x,y:y};
         }
       }
-
-
     }
     
     randSquare(ms){
@@ -401,13 +385,6 @@ export default class Swarm{
             }
         }
     }
-    // rotation(rotation){
-    //     for (let i=0; i<this.sprites.length;++i){
-    //         let s = this.sprites[i];     
-    //         s.rotation = rotation * (Math.PI / 180);
-    //         // console.log(s.rotation)
-    //     }
-    // }
 }
 
 
@@ -680,9 +657,6 @@ function textBoxConfig(parent, app, flag_name, title, type="number",
     const formFields = document.createElement("div");
     formFields.classList.add("form-fields");
     formGroup.append(formFields);
-
-    // Add difference swarm image
-    const swarmImage = imageSelector(app, SWARM_IMAGE_FLAG, "Token for Swarm mobs");
   
     createCheckBox(app, formFields, SWARM_FLAG, "", '');
     createCheckBox(app, formFields, OVER_FLAG, "Over", "Check if the swarm should be placed over players." );
@@ -693,8 +667,11 @@ function textBoxConfig(parent, app, flag_name, title, type="number",
     // Add the form group to the bottom of the Identity tab
     html[0].querySelector("div[data-tab='character']").append(formGroup);
 
+
+    // Add difference swarm image
+    //const swarmImage = imageSelector(app, SWARM_IMAGE_FLAG, "Token for Swarm mobs");
     // And add the token image selectors to the 'apperance' tab
-    html[0].querySelector("div[data-tab='appearance']").append(swarmImage);
+    //html[0].querySelector("div[data-tab='appearance']").append(swarmImage);
   
     // Set the apps height correctly
     app.setPosition();
