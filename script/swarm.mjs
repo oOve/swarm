@@ -27,6 +27,8 @@ const ANIM_TYPES = [ANIM_TYPE_CIRCULAR, ANIM_TYPE_RAND_SQUARE, ANIM_TYPE_SPIRAL,
 
 const OVER_FLAG = "swarmOverPlayers";
 const SETTING_HP_REDUCE = "reduceSwarmWithHP";
+const SETTING_HP_REDUCE_ATTRIBUTE_VALUE = "attributeHpValue";
+const SETTING_HP_REDUCE_ATTRIBUTE_MAX = "attributeHpMax";
 const SETTING_FADE_TIME = "fadeTime";
 const SETTING_STOP_TIME = "stopTime";
 const theta = 0.01;
@@ -57,17 +59,25 @@ async function wildcards(token_id){
 }
 
 function getHealthEstimate(token){
+  let reduceHP = game.settings.get(MOD_NAME, SETTING_HP_REDUCE);
+  if (!reduceHP) return 1;  // always return 100% health
+
   switch (game.system.id){
     case 'pf1':
     case 'pf2e':
     case 'dnd5e':
       return token.actor.data.data.attributes.hp.value / token.actor.data.data.attributes.hp.max;
-    
+    case 'D35E':
+      return token.actor.system.attributes.hp.value / token.actor.system.attributes.hp.max;
     default:
-      console.warn("No health estimate implemented for system", game.system.id);
+      let hpValue = Object.byString(token, game.settings.get(MOD_NAME, SETTING_HP_REDUCE_ATTRIBUTE_VALUE));
+      let hpMax = Object.byString(token, game.settings.get(MOD_NAME, SETTING_HP_REDUCE_ATTRIBUTE_MAX));
+      if (hpValue && hpMax) {
+        return hpValue / hpMax;
+      } else {
+        console.warn("No health estimate implemented for system", game.system.id);
+      }
   }
-  
-  
 }
 
  
@@ -78,8 +88,10 @@ window.SWARMS = SWARMS;
 export default class Swarm{
     constructor( token, number ){
         this.t = 0;
-        this.number = number;
         this.token  = token;
+        this.currentHPPercent = this.calculateHPPercent();  // Calculate current HP percent
+        this.number = this.determineVisibleSprites(this.currentHPPercent, number);  // Determine initial number of visible sprites
+        this.maxSprites = number;  // Store the maximum number of sprites
         this.sprites= [];
         this.dest   = [];
         this.speeds = [];
@@ -89,7 +101,7 @@ export default class Swarm{
 
         // this.randomRotation = true;        
         this.faded  = token.document.hidden;
-        this.visible= (this.faded)?0:number;
+        this.visible= (this.faded)?0:this.number;
 
         
         this.layer.elevation = (token.document.getFlag(MOD_NAME, OVER_FLAG)?10000:0);
@@ -184,13 +196,24 @@ export default class Swarm{
         }
     }
 
+    calculateHPPercent() {
+        return getHealthEstimate(this.token);
+    }
+
+    determineVisibleSprites(hpPercent, maxNumber) {
+        // No sprites when hp zero
+        if (hpPercent <= 0) return 0;
+        const minSprites = 1;
+        return Math.max(minSprites, Math.round(hpPercent * maxNumber));
+    }
+
     /**
      * The main animation callback for this swarm
      * @param {Number} t Time fraction of the current fps
      */
     anim(t){
         if (!this.created){
-          this.createSprites(this.number, this.token, this.layer);
+          this.createSprites(this.maxSprites, this.token, this.layer);  // Use maxSprites instead of number
           this.created=true;
         }
 
@@ -211,6 +234,17 @@ export default class Swarm{
             this.visible += step;
             this.sprites.forEach((s,i)=>{s.alpha = (i>this.visible)?0:1});
         }
+
+        let currentHPPercent = this.calculateHPPercent();
+                if (currentHPPercent !== this.currentHPPercent) {
+            this.currentHPPercent = currentHPPercent;
+            this.number = this.determineVisibleSprites(currentHPPercent, this.maxSprites);
+            // Adjust visibility based on the number of "surviving" sprites
+            this.sprites.forEach((s, i) => {
+                s.alpha = (i < this.number) ? 1 : 0;
+            });
+        }
+
         // Calling the animation specific method, set_destination
         this.set_destinations(ms);
         // Calling the generic move method
@@ -476,7 +510,6 @@ Hooks.on("canvasReady", ()=> {
  // Settings:
  Hooks.once("init", () => {
   
-    /*
     game.settings.register(MOD_NAME, SETTING_HP_REDUCE, {
         name: "Reduce swarm with HP",
         hint: "Reduce the swarm as HP decreases, requires support for your system",
@@ -485,7 +518,22 @@ Hooks.on("canvasReady", ()=> {
         type: Boolean,
         default: false
    });
-   */
+    game.settings.register(MOD_NAME, SETTING_HP_REDUCE_ATTRIBUTE_VALUE, {
+        name: "Attribute for Current HP",
+        hint: "System dependent path to current hp Attribute of token (token.[...])",
+        scope: 'world',
+        config: true,
+        type: String,
+        default: "actor.system.attributes.hp.value",
+   });
+    game.settings.register(MOD_NAME, SETTING_HP_REDUCE_ATTRIBUTE_MAX, {
+        name: "Attribute for Max HP",
+        hint: "System dependent path to max hp Attribute of token (token.[...])",
+        scope: 'world',
+        config: true,
+        type: String,
+        default: "actor.system.attributes.hp.max",
+   });
     game.settings.register(MOD_NAME, SETTING_FADE_TIME, {
         name: "Fade time",
         hint: "How long, in seconds, the fade in/out should take",
